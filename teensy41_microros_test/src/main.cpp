@@ -66,7 +66,7 @@ void setup()
   get_teensy_mac(arduino_mac);
 #endif
 
-  // IPAddress arduino_ip(192, 168, 1, 177);s
+  // IPAddress arduino_ip(192, 168, 1, 177);
   // set_microros_native_ethernet_udp_transports(arduino_mac, arduino_ip, agent_ip, 9999);
   byte local_mac[] = {0xAA, 0xBB, 0xCC, 0xEE, 0xDD, 0xFF};
   IPAddress local_ip(192, 168, 1, 177);
