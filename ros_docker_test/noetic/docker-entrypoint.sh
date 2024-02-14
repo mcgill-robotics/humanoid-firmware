@@ -3,10 +3,10 @@
 # # Update and install necessary packages
 apt-get update
 apt-get install -y \
-    libusb-1.0-0 \
-    iproute2 \
     python3-pip \
+    iproute2 \
     iputils-ping \
+    libusb-1.0-0 \
     curl \
     udev \
     libfontconfig1 \

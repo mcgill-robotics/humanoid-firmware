@@ -13,7 +13,7 @@ services:
       - ros_network
     # devices:
       # - "/dev/tty.usbmodem3838345835391:/dev/ttyODrive"
-    entrypoint: /ros_entrypoint.sh
+    entrypoint: ["/ros_entrypoint.sh"]
     command: tail -f /dev/null
 networks:
   ros_network:
