@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <NativeEthernet.h>
 
 #include <micro_ros_platformio.h>
 
@@ -58,6 +59,9 @@ void error_loop()
 
 void setup()
 {
+  Serial.begin(115200);
+  while (!Serial)
+    ;
   byte arduino_mac[] = {0xAA, 0xBB, 0xCC, 0xEE, 0xDD, 0xFF};
 
 #if defined(ARDUINO_TEENSY41)
@@ -66,27 +70,34 @@ void setup()
 
   IPAddress arduino_ip(192, 168, 1, 177);
   IPAddress agent_ip(192, 168, 1, 113);
-  set_microros_native_ethernet_udp_transports(arduino_mac, arduino_ip, agent_ip, 9999);
+  // set_microros_native_ethernet_udp_transports(arduino_mac, arduino_ip, agent_ip, 9999);
+  set_microros_native_ethernet_transports(arduino_mac, arduino_ip, agent_ip, 9999);
 
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, HIGH);
 
   delay(2000);
 
+  Serial.println("rcl_get_default_allocator\r\n");
   allocator = rcl_get_default_allocator();
-
+  Serial.println("rcl_get_default_allocator done\r\n");
+  Serial.println("rclc_support_init\r\n");
   // create init_options
   RCCHECK(rclc_support_init(&support, 0, NULL, &allocator));
+  Serial.println("rclc_support_init done\r\n");
 
+  Serial.println("rclc_node_init_default\r\n");
   // create node
   RCCHECK(rclc_node_init_default(&node, "micro_ros_arduino_ethernet_node", "namespace", &support));
-
+  Serial.println("rclc_node_init_default done\r\n");
+  Serial.println("rclc_publisher_init_best_effort\r\n");
   // create publisher
   RCCHECK(rclc_publisher_init_best_effort(
       &publisher,
       &node,
       ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int32),
       "topic_name"));
+  Serial.println("rclc_publisher_init_best_effort done\r\n");
 
   msg.data = 0;
 }
