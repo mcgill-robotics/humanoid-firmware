@@ -1,0 +1,15 @@
+services:
+  Athena:
+    image: mcgillrobotics/humanoid:latest
+    volumes:
+      - ./:/root/Humanoid
+    command: bash -c "tail -f /dev/null"
+    ports:
+      - "8888:8888"
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
