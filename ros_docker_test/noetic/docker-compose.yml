@@ -7,6 +7,7 @@ services:
     volumes:
       - ./your_ros_project:/ros_workspace # Map your ROS project directory to the container
       - ./docker-entrypoint.sh:/ros_entrypoint.sh # Mount the entrypoint script
+      - /dev:/dev # Mount the /dev directory to the container, for ODrive USB access
     environment:
       - UDEV=on
     networks:
