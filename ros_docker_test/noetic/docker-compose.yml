@@ -5,7 +5,7 @@ services:
     container_name: ros_noetic_core
     privileged: true
     volumes:
-      - ./your_ros_project:/ros_workspace # Map your ROS project directory to the container
+      - ./humanoid_ws:/ros_workspace # Map your ROS project directory to the container
       - ./docker-entrypoint.sh:/ros_entrypoint.sh # Mount the entrypoint script
       - /dev:/dev # Mount the /dev directory to the container, for ODrive USB access
     environment:

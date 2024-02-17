@@ -4,6 +4,7 @@
 apt-get update
 apt-get install -y \
     python3-pip \
+    python3-catkin-tools \
     iproute2 \
     iputils-ping \
     libusb-1.0-0 \
