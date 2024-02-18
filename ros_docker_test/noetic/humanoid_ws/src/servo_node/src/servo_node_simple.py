@@ -1,12 +1,11 @@
-import random
-import threading
-from std_msgs.msg import Float32MultiArray
-from odrive.utils import dump_errors
-from odrive.enums import AxisState, ProcedureResult
-from enum import Enum
 import rospy
 import os
 import sys
+import random
+import threading
+from std_msgs.msg import Float32MultiArray
+from enum import Enum
+
 
 currentdir = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(currentdir)
@@ -26,10 +25,16 @@ class Node_servo_simple:
 
         # STATE VARIABLES, holds the current state of each joint
         self.joint_state_dict = {
-            "left_00": None,
-            "left_01": None,
-            "left_02": None,
+            "left_00": 0,
+            "left_01": 0,
+            "left_02": 0,
         }
+        # Use this for production
+        # self.joint_state_dict = {
+        #     "left_00": None,
+        #     "left_01": None,
+        #     "left_02": None,
+        # }
 
         rospy.init_node("servo_node_simple")
 
@@ -70,16 +75,20 @@ class Node_servo_simple:
 
             # PUBLISH SETPOINT, do additional logic (kinematics) here
             servo_cmd = Float32MultiArray()
-            for joint_name, joint_pos in self.joint_setpoint_dict.items():
+            for joint_name, joint_pos in self.joint_state_dict.items():
+                print(f"Setting {joint_name} to {joint_pos}")
                 try:
-                    # Simulate random servo positions increment
+                    # Simulate random servo positions increment for testing
                     temp = joint_pos + random.uniform(-20, 20)
+                    print(f"Setting {joint_name} to {temp}")
+
                     self.joint_setpoint_dict[joint_name] = temp
                     servo_cmd.data.append(
                         temp
                     )
                 # Default value in case lose connection to ODrive
                 except:
+                    print(f"Setting {joint_name} to 0")
                     servo_cmd.data.append(0.0)
                 # Publish feedback
                 self.command_publisher.publish(servo_cmd)
