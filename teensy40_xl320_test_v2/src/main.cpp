@@ -1,12 +1,4 @@
-
-// ========================================
-// Dynamixel XL-320 Arduino library example
-// ========================================
-
-// Read more:
-// https://github.com/hackerspace-adelaide/XL320
 #include <Arduino.h>
-// #include "TeensyThreads.h"
 
 #include "XL320.h"
 #include "HardwareSerial.h"
@@ -81,22 +73,8 @@ void process_serial_cmd()
   }
 }
 
-void setup()
+void servo_loop()
 {
-  // Talking standard serial, so connect servo data line to Digital TX 1
-  // Comment out this line to talk software serial
-  Serial1.begin(1000000, SERIAL_8N1_HALF_DUPLEX);
-
-  // Initialise your robot
-  robot.begin(Serial1); // Hand in the serial object you're using
-
-  // I like fast moving servos, so set the joint speed to max!
-  robot.setJointSpeed(servo_id, 1023 / 2);
-}
-
-void loop()
-{
-  process_serial_cmd();
   // LED test.. let's randomly set the colour (0-7)
   robot.LED(servo_id, &rgb[random(0, 7)]);
 
@@ -114,7 +92,7 @@ void loop()
   p.toStream(SerialUSB);
 #endif
 
-  delay(250);
+  delay(100);
   Serial1.clear();
 
   // Get state
@@ -128,6 +106,36 @@ void loop()
   // Change the servo position by 100 each loop
   // servo_setpoint_raw = (servo_setpoint_raw + 100) % 1023;
 
-  delay(250);
+  delay(100);
   // Set a delay to account for the receive delay period
+}
+
+void print_servo_state()
+{
+  // Print the servo state
+  SerialUSB.print("Servo ID: ");
+  SerialUSB.print(servo_id);
+  SerialUSB.print(", Setpoint: ");
+  SerialUSB.print(servo_setpoint_raw);
+  SerialUSB.print(", Position: ");
+  SerialUSB.println(servo_pos_raw);
+}
+
+void setup()
+{
+  // Talking standard serial, so connect servo data line to Digital TX 1
+  // Comment out this line to talk software serial
+  Serial1.begin(1000000, SERIAL_8N1_HALF_DUPLEX);
+
+  // Initialise your robot
+  robot.begin(Serial1); // Hand in the serial object you're using
+
+  // I like fast moving servos, so set the joint speed to max!
+  robot.setJointSpeed(servo_id, 1023 / 2);
+}
+
+void loop()
+{
+  process_serial_cmd();
+  servo_loop();
 }
