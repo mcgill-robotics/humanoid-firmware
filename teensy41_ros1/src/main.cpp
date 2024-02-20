@@ -20,8 +20,20 @@ ros::Subscriber<std_msgs::Float32MultiArray> servo_cmd_sub("servo_cmd", servo_cb
 float servo_current_angles[1] = {0};
 float servo_target_angles[1] = {0};
 
+
+// SERVO CONFIGURATION
+XL320 robot;
+char rgb[] = "rgbypcwo";
+int servoPosition = 0;
+int ledColour = 0;
+int servoID = 16;
+int readPosition = 0;
+
 void servo_setup()
 {
+  Serial1.begin(1000000, SERIAL_8N1_HALF_DUPLEX);
+  robot.begin(Serial1); // Hand in the serial object you're using
+  robot.setJointSpeed(servoID, 1023);
 }
 
 void servo_loop()
