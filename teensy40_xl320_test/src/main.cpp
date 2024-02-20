@@ -1,21 +1,42 @@
 #include "Arduino.h"
-#include "IPAddress.h"
-#include "Servo_XL320.h"
-#include "control_table_xl320.h"
+#include "ServoChain.h"
 
-byte local_mac[] = {0xAA, 0xBB, 0xCC, 0xEE, 0xDD, 0xFF};
-IPAddress local_ip(192, 168, 1, 177);
-IPAddress agent_ip(192, 168, 1, 113);
-size_t agent_port = 8888;
+#define DIR_PIN_UART1 (uint8_t)16
+#define LEFT_LEG_ANKLE_ID (uint8_t)14
+#define LEFT_LEG_KNEE_ID (uint8_t)15
+#define LEFT_LEG_HIPROLL_ID (uint8_t)16
+#define LEFT_LEG_HIPYAW_ID (uint8_t)17
+#define LEFT_LEG_HIPPITCH_ID (uint8_t)18
+#define LEFT_LEG_PRESSURE_ID (uint8_t)19
 
-void setup()
-{
-  Serial1.begin(1000000, SERIAL_8N1_HALF_DUPLEX);
-  while (!Serial1)
-  {
+// uncomment the line below to debug
+// #define DEBUG_XL320
+XL320Chain chain1(DIR_PIN_UART1, &Serial1);
+
+uint8_t left_leg_ids[6] = {LEFT_LEG_HIPPITCH_ID, LEFT_LEG_HIPYAW_ID,
+                           LEFT_LEG_HIPROLL_ID,  LEFT_LEG_KNEE_ID,
+                           LEFT_LEG_ANKLE_ID,    LEFT_LEG_PRESSURE_ID};
+int left_leg_length = sizeof(left_leg_ids);
+
+unsigned short left_leg_goal_positions[5];
+unsigned short left_leg_feedback[18];
+
+void setup() {
+// verify all the servos in the chain respond
+#ifndef DEBUG_XL320
+  int id_err = chain1.verifyIDs(left_leg_ids, left_leg_length);
+#else
+  int id_err = chain1.verifyIDs(left_leg_ids, left_leg_length, &SerialUSB);
+#endif
+  if (id_err) {
+    // TODO: Handle ID verification errors
   }
-  set_microros_native_ethernet_transports(local_mac, local_ip, agent_ip,
-                                          agent_port);
+  chain1.torqueON(left_leg_ids, left_leg_length);
 }
 
-void loop() {}
+void loop() {
+  chain1.setServoPositions(left_leg_ids, left_leg_goal_positions,
+                           left_leg_length - 1);
+
+  chain1.getServoData(left_leg_ids, left_leg_feedback, left_leg_length);
+}

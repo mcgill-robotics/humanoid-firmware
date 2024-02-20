@@ -1,17 +1,8 @@
-//Size in bytes
-#ifndef control_table_xl320
-#define control_table_xl320
-#include "stdint.h"
+// Size in bytes
+#ifndef CONTROL_TABLE_XL320
+#define CONTROL_TABLE_XL320
 
-struct StatusPacket {
-    int packet_id;
-    int param_length;
-    int error;
-    uint8_t* param_pnt;
-    uint8_t* parameters;
-};
-
-//EEPROM Control Table
+// EEPROM Control Table
 #define MODEL_NUMBER_ADR 0
 #define MODEL_NUMBER_SIZE 2
 #define FIRMWARE_VERSION_ADR 2
@@ -41,7 +32,7 @@ struct StatusPacket {
 #define SHUTDOWN_ADR 18
 #define SHUTDOWN_SIZE 1
 
-//RAM Control Table
+// RAM Control Table
 #define TORQUE_ENABLE_ADR 24
 #define TORQUE_ENABLE_SIZE 1
 #define LED_ADR 25
@@ -77,4 +68,4 @@ struct StatusPacket {
 #define PUNCH_ADR 51
 #define PUNCH_SIZE 2
 
-#endif //control_table_xl320
+#endif  // CONTROL_TABLE_XL320
