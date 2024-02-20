@@ -1,4 +1,6 @@
 #include <Arduino.h>
+#include "XL320.h"
+#include "HardwareSerial.h"
 
 // Include the ROS library
 #include "ros.h"
@@ -17,35 +19,68 @@ std_msgs::Float32MultiArray servo_cmd_msg;
 ros::Publisher servo_fb_pub("servo_fb", &servo_fb_msg);
 ros::Subscriber<std_msgs::Float32MultiArray> servo_cmd_sub("servo_cmd", servo_cb);
 
-float servo_current_angles[1] = {0};
-float servo_target_angles[1] = {0};
-
-
 // SERVO CONFIGURATION
 XL320 robot;
 char rgb[] = "rgbypcwo";
-int servoPosition = 0;
-int ledColour = 0;
-int servoID = 16;
-int readPosition = 0;
+int servo_id = 16;
+int led_color = 0;
+float servo_setpoint_raw[1] = {0};
+float servo_pos_raw[1] = {0};
+float servo_pos_deg[1] = {0};
+float servo_setpoint_deg[1] = {0};
+
+float map_float(float x, float in_min, float in_max, float out_min, float out_max)
+{
+  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}
 
 void servo_setup()
 {
+  // Talking standard serial, so connect servo data line to Digital TX 1
+  // Comment out this line to talk software serial
   Serial1.begin(1000000, SERIAL_8N1_HALF_DUPLEX);
+
+  // Initialise your robot
   robot.begin(Serial1); // Hand in the serial object you're using
-  robot.setJointSpeed(servoID, 1023);
+
+  // I like fast moving servos, so set the joint speed to max!
+  robot.setJointSpeed(servo_id, 1023 / 2);
 }
 
 void servo_loop()
 {
+  // LED test.. let's randomly set the colour (0-7)
+  robot.LED(servo_id, &rgb[random(0, 7)]);
+
+  // SETPOINT TEST
+  robot.moveJoint(servo_id, servo_setpoint_raw[0]);
+  delay(100);
+  //  Serial1.clear();
+  byte buffer[256];
+  XL320::Packet p = XL320::Packet(buffer, robot.readPacket(buffer, 256));
+
+  // Driver diagnostic
+#if DEBUG_PRINT == 1
+  p.toStream(SerialUSB);
+#endif
+
+  delay(100);
+  Serial1.clear();
+
+  // Get state
+  servo_pos_raw[0] = robot.getJointPosition(servo_id);
+  servo_pos_deg[0] = map_float(servo_pos_raw[0], 0, 1023, 0, 359.99);
+
+  delay(100);
 }
 
 void setup()
 {
+  servo_setup();
+
   nh.initNode();
 
-  servo_setup();
-  servo_fb_msg.data = servo_current_angles;
+  servo_fb_msg.data = servo_pos_deg;
   servo_fb_msg.data_length = 1;
   servo_cmd_msg.data_length = 1;
 
@@ -75,5 +110,6 @@ void loop()
 
 void servo_cb(const std_msgs::Float32MultiArray &input_msg)
 {
-  servo_target_angles[0] = input_msg.data[0];
+  servo_setpoint_deg[0] = input_msg.data[0];
+  servo_setpoint_raw[0] = map_float(servo_setpoint_deg[0], 0, 359.99, 0, 1023);
 }
