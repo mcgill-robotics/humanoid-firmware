@@ -5,36 +5,25 @@ import random
 import threading
 from std_msgs.msg import Float32MultiArray
 from enum import Enum
+from ServoJoint import ServoJoint
 
 
 currentdir = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(currentdir)
 
-# TODO: Figure out why catkin on the Jetson isn't playing nice with this import. It worked on my PC -Eren
-# import init_functions
 
-
+# TODO change message type to custom message
 class Node_servo_simple:
     def __init__(self):
         # SETPOINT VARIABLES, holds the setpoint for each joint
-        self.joint_setpoint_dict = {
+        self.joint_dict = {
             "left_00": None,
             "left_01": None,
             "left_02": None,
         }
-
-        # STATE VARIABLES, holds the current state of each joint
-        self.joint_state_dict = {
-            "left_00": 0,
-            "left_01": 0,
-            "left_02": 0,
-        }
-        # Use this for production
-        # self.joint_state_dict = {
-        #     "left_00": None,
-        #     "left_01": None,
-        #     "left_02": None,
-        # }
+        self.joint_dict["left_00"] = ServoJoint(16, "left_00")
+        self.joint_dict["left_01"] = ServoJoint(17, "left_01")
+        self.joint_dict["left_02"] = ServoJoint(18, "left_02")
 
         rospy.init_node("servo_node_simple")
 
@@ -54,9 +43,13 @@ class Node_servo_simple:
 
     # Receive setpoint from external control node
     def handle_servo_state(self, msg):
-        self.joint_state_dict["left_00"] = msg.data[0]
-        self.joint_state_dict["left_01"] = msg.data[1]
-        self.joint_state_dict["left_02"] = msg.data[2]
+        self.joint_dict["left_00"].set_pos_deg(msg.data[0])
+        self.joint_dict["left_01"].set_pos_deg(msg.data[1])
+        self.joint_dict["left_02"].set_pos_deg(msg.data[2])
+        for joint_name, joint_obj in self.joint_dict.items():
+            if joint_obj.pos_raw < 0 or joint_obj.pos_raw > 1023:
+                joint_obj.is_faulted = True
+                print(f"{joint_name} is faulted or disconnected.")
 
     # For future use
     def watchdog_func(self):
@@ -75,36 +68,35 @@ class Node_servo_simple:
 
             # PUBLISH SETPOINT, do additional logic (kinematics) here
             servo_cmd = Float32MultiArray()
-            for joint_name, joint_pos in self.joint_state_dict.items():
-                print(f"Setting {joint_name} to {joint_pos}")
-                try:
-                    # Simulate random servo positions increment for testing
-                    temp = joint_pos + random.uniform(-20, 20)
-                    print(f"Setting {joint_name} to {temp}")
-
-                    self.joint_setpoint_dict[joint_name] = temp
-                    servo_cmd.data.append(
-                        temp
-                    )
-                # Default value in case lose connection to ODrive
-                except:
-                    print(f"Setting {joint_name} to 0")
+            for joint_name, joint_obj in self.joint_dict.items():
+                print(f"Setting {joint_name} to {joint_obj}")
+                if joint_obj.is_faulted:
+                    print(f"Setting {joint_obj.name} to 0")
                     servo_cmd.data.append(0.0)
-                # Publish feedback
-                self.command_publisher.publish(servo_cmd)
+                    continue
+                # Simulate random servo positions increment for testing
+                temp = joint_obj.get_pos_deg() + random.uniform(-20, 20)
+
+                print(f"Setting {joint_name} to {temp}")
+                joint_obj.set_setpoint_deg(temp)
+                servo_cmd.data.append(temp)
+
+            # Publish command to servo
+            self.command_publisher.publish(servo_cmd)
 
             # PRINT POSITIONS TO CONSOLE
-            for joint_name, joint_pos in self.joint_state_dict.items():
-                print(f"{joint_name}: {joint_pos}")
+            for joint_name, joint_obj in self.joint_dict.items():
+                print(f"{joint_name}: {joint_obj.get_pos_deg()}")
                 pass
 
             print()
             self.rate.sleep()
 
         # On shutdown, bring motors to 0 position
-        print("Shutdown prompt received. Setting all motors to idle state.")
-        for joint_name, joint_pos in self.joint_state_dict.items():
-            pass
+        if rospy.is_shutdown():
+            print("Shutdown prompt received. Setting 0 angle.")
+            for joint_name, joint_obj in self.joint_dict.items():
+                pass
 
 
 if __name__ == "__main__":
