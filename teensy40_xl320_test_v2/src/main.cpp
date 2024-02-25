@@ -128,7 +128,11 @@ void print_servo_state()
 void setup()
 {
   SerialUSB.begin(115200);
+  while (!SerialUSB)
+    ;
   servo_setup();
+  int id_found = robot.queryID();
+  SerialUSB.printf("Found servo ID: %d\n", id_found);
 }
 
 void loop()

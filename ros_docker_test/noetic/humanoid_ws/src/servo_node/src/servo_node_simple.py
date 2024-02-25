@@ -6,6 +6,7 @@ import threading
 from std_msgs.msg import Float32MultiArray
 from enum import Enum
 from ServoJoint import ServoJoint
+from servo_node.msg import ServoState
 
 
 currentdir = os.path.dirname(os.path.realpath(__file__))

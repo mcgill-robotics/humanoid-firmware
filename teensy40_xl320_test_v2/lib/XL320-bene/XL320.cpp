@@ -68,6 +68,30 @@ void XL320::setJointSpeed(int id, int value)
 	nDelay(NANO_TIME_DELAY);
 }
 
+int XL320::queryID()
+{
+	int broadcast_ID = 0xFE;
+	Stream *debugStream = NULL;
+	unsigned char buffer[255];
+	RXsendPacket(broadcast_ID, XL_ID, 2);
+	this->stream->flush();
+	if (this->readPacket(buffer, 255) > 0)
+	{
+		Packet p(buffer, 255);
+		if (debugStream)
+			p.toStream(*debugStream);
+		if (p.isValid() && p.getParameterCount() >= 3)
+		{
+			return (p.getParameter(1)) | (p.getParameter(2) << 8);
+		}
+		else
+		{
+			return -1;
+		}
+	}
+	return -2;
+}
+
 void XL320::LED(int id, char led_color[])
 {
 	int Address = XL_LED;

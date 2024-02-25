@@ -94,6 +94,7 @@ public:
 	int getJointSpeed(int id);
 	int getJointLoad(int id);
 	int getJointTemperature(int id);
+	int queryID();
 	int isJointMoving(int id);
 
 	int sendPacket(int id, int Address, int value);
