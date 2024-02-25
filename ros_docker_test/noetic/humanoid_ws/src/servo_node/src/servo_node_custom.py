@@ -1,16 +1,17 @@
-import rospy
-import os
-import sys
-import random
-import threading
-from std_msgs.msg import Float32MultiArray
-from enum import Enum
-from ServoJoint import ServoJoint
-from servo_node.msg import ServoState
-
+import os, sys
 
 currentdir = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(currentdir)
+
+import rospy
+import random
+import threading
+
+sys.path.append(currentdir)
+# from std_msgs.msg import Float32MultiArray
+from enum import Enum
+from ServoJoint import ServoJoint
+from servo_node.msg import ServoState
 
 
 # TODO change message type to custom message
@@ -70,19 +71,23 @@ class Node_servo_simple:
             print(f"Time: {rospy.get_time()}")
 
             # PUBLISH SETPOINT, do additional logic (kinematics) here
-            servo_cmd = Float32MultiArray()
+            # servo_cmd = Float32MultiArray()
+            servo_cmd = ServoState()
             for joint_name, joint_obj in self.joint_dict.items():
-                print(f"Setting {joint_name} to {joint_obj}")
+                # Determine the new setpoint
                 if joint_obj.is_faulted:
-                    print(f"Setting {joint_obj.name} to 0")
-                    servo_cmd.data.append(0.0)
-                    continue
-                # Simulate random servo positions increment for testing
-                temp = joint_obj.get_pos_deg() + random.uniform(-20, 20)
+                    rospy.loginfo(f"{joint_name} is faulted, setting to 0")
+                    new_setpoint = 0.0
+                else:
+                    # Simulate random servo positions increment for testing
+                    new_setpoint = joint_obj.get_pos_deg() + random.uniform(-25, 25)
+                    rospy.loginfo(f"Setting {joint_name} to {new_setpoint}")
 
-                print(f"Setting {joint_name} to {temp}")
-                joint_obj.set_setpoint_deg(temp)
-                servo_cmd.data.append(temp)
+                # Update the joint object's setpoint
+                joint_obj.set_setpoint_deg(new_setpoint)
+
+                # Dynamically set the corresponding attribute in the servo_cmd message
+                setattr(servo_cmd, joint_name, new_setpoint)
 
             # Publish command to servo
             self.command_publisher.publish(servo_cmd)
