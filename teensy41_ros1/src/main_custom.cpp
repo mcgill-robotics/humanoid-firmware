@@ -83,10 +83,10 @@ void setup()
 
   // servo_fb_msg.data = servo_pos_deg;
   // servo_fb_msg.data_length = 1;
-  // servo_cmd_msg.data_length = 1;
+  // servo_cmd_msg.data_length = 1
 
-  nh.advertise(servo_fb_pub);
   nh.subscribe(servo_cmd_sub);
+  nh.advertise(servo_fb_pub);
 
   nh.negotiateTopics();
   while (!nh.connected())
@@ -104,13 +104,14 @@ void loop()
   lastTime += PID_PERIOD_US;
 
   servo_loop();
+  servo_fb_msg.left_ankle = servo_pos_deg[0];
   servo_fb_pub.publish(&servo_fb_msg);
 
   nh.spinOnce();
 }
 
-void servo_cmd_cb(const std_msgs::Float32MultiArray &input_msg)
+void servo_cmd_cb(const servo_node::ServoState &input_msg)
 {
-  servo_setpoint_deg[0] = input_msg.data[0];
+  servo_setpoint_deg[0] = input_msg.left_ankle;
   servo_setpoint_raw[0] = map_float(servo_setpoint_deg[0], 0, 359.99, 0, 1023);
 }

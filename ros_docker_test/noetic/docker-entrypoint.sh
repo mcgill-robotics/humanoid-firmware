@@ -13,7 +13,9 @@ apt-get install -y \
     libfontconfig1 \
     libusb-dev \
     libxft-dev \
-    usbutils
+    usbutils \
+    ros-${ROS_DISTRO}-rosserial-arduino \
+    ros-${ROS_DISTRO}-rosserial
 
 pip install odrive
 
@@ -27,6 +29,7 @@ sudo bash -c "mkdir -p /etc/udev/rules.d/ && curl https://cdn.odriverobotics.com
 
 # Source the ROS environment
 source /opt/ros/noetic/setup.bash
+echo "source /opt/ros/noetic/setup.bash" >>~/.bashrc
 
 # Execute the command provided to the docker container
 exec "$@"

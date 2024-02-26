@@ -79,7 +79,8 @@ void servo_setup()
   robot.begin(Serial1); // Hand in the serial object you're using
 
   // I like fast moving servos, so set the joint speed to max!
-  robot.setJointSpeed(servo_id, 1023 / 2);
+  // robot.setJointSpeed(servo_id, 1023 / 2);
+  robot.setJointSpeed(servo_id, 1023);
 }
 
 void servo_loop()

@@ -7,17 +7,16 @@ import rospy
 import random
 import threading
 
-sys.path.append(currentdir)
+# sys.path.append(currentdir)
 # from std_msgs.msg import Float32MultiArray
 from enum import Enum
 from ServoJoint import ServoJoint
 from servo_node.msg import ServoState
 
 
-# TODO change message type to custom message
 class Node_servo_simple:
     def __init__(self):
-        # SETPOINT VARIABLES, holds the setpoint for each joint
+        # Joint dictionary
         self.joint_dict = {
             "left_ankle": None,
             "left_knee": None,
@@ -32,7 +31,7 @@ class Node_servo_simple:
 
         rospy.init_node("servo_node_custom")
 
-        # Subscriptions
+        # Subscribers
         self.state_subscriber = rospy.Subscriber(
             "/servo_state", ServoState, self.handle_servo_state
         )
@@ -40,7 +39,7 @@ class Node_servo_simple:
         # Publishers
         self.command_publisher = rospy.Publisher("/servo_cmd", ServoState, queue_size=1)
 
-        # Frequency of the ODrive I/O
+        # Frequency of the Servo I/O
         self.rate = rospy.Rate(100)
         self.run()
 
@@ -80,7 +79,8 @@ class Node_servo_simple:
                     new_setpoint = 0.0
                 else:
                     # Simulate random servo positions increment for testing
-                    new_setpoint = joint_obj.get_pos_deg() + random.uniform(-25, 25)
+                    # new_setpoint = joint_obj.get_pos_deg() + random.uniform(-25, 25)
+                    new_setpoint = random.uniform(0, 180)
                     rospy.loginfo(f"Setting {joint_name} to {new_setpoint}")
 
                 # Update the joint object's setpoint
