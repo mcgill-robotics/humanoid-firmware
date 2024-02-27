@@ -12,10 +12,11 @@
 #include "XL_320.hpp"
 
 using namespace std;
-void delay_us (uint16_t us)
+void delay_us(uint16_t us)
 {
-	__HAL_TIM_SET_COUNTER(&htim1,0);  // set the counter value a 0
-	while (__HAL_TIM_GET_COUNTER(&htim1) < us);  // wait for the counter to reach the us input in the parameter
+    __HAL_TIM_SET_COUNTER(&htim1, 0); // set the counter value a 0
+    while (__HAL_TIM_GET_COUNTER(&htim1) < us)
+        ; // wait for the counter to reach the us input in the parameter
 }
 
 // extern "C"
@@ -477,16 +478,17 @@ int XL_320 ::getFirmwareVersion()
 int XL_320 ::setID(int v)
 {
     vector<int> param;
+    int write_instruction = 0x03;
 
-    // Instruction
+    // Adress, 2 bytes
     param.push_back(3);
     param.push_back(0);
 
-    // Value
+    // Value, 1 byte
     param.push_back(v);
 
     // Send
-    if (send(0x03, param) > 0)
+    if (send(write_instruction, param) > 0)
     {
         cout << error();
         return -1;
@@ -500,15 +502,18 @@ int XL_320 ::setID(int v)
 int XL_320 ::getID()
 {
     vector<int> param;
+    int read_instruction = 0x02;
 
-    // Instruction
+    // Address, ID is 3
     param.push_back(3);
     param.push_back(0);
+
+    // Length, 1 byte
     param.push_back(1);
     param.push_back(0);
 
     // Send
-    if (send(0x02, param, true) > 0)
+    if (send(read_instruction, param, true) > 0)
     {
         cout << error();
         return -1;

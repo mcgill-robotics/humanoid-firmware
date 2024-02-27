@@ -294,7 +294,6 @@ int XL320::isJointMoving(int id)
 
 int XL320::sendPacket(int id, int Address, int value)
 {
-
 	/*Dynamixel 2.0 communication protocol
 	  used by Dynamixel XL-320 and Dynamixel PRO only.
 	*/
@@ -305,7 +304,7 @@ int XL320::sendPacket(int id, int Address, int value)
 
 	byte txbuffer[bufsize];
 
-	Packet p(txbuffer, bufsize, id, 0x03, 4,
+	Packet p(txbuffer, bufsize, id, XL_INSTR_WRITE, 4,
 			 DXL_LOBYTE(Address),
 			 DXL_HIBYTE(Address),
 			 DXL_LOBYTE(value),
@@ -319,21 +318,6 @@ int XL320::sendPacket(int id, int Address, int value)
 	return bufsize;
 }
 
-void XL320::nDelay(uint32_t nTime)
-{
-	/*
-	uint32_t max;
-	for( max=0; max < nTime; max++){
-
-	}
-	*/
-}
-
-int XL320::flush()
-{
-	this->stream->flush();
-}
-
 int XL320::RXsendPacket(int id, int Address)
 {
 	return this->RXsendPacket(id, Address, 2);
@@ -341,7 +325,6 @@ int XL320::RXsendPacket(int id, int Address)
 
 int XL320::RXsendPacket(int id, int Address, int size)
 {
-
 	/*Dynamixel 2.0 communication protocol
 	  used by Dynamixel XL-320 and Dynamixel PRO only.
 	*/
@@ -350,7 +333,8 @@ int XL320::RXsendPacket(int id, int Address, int size)
 
 	byte txbuffer[bufsize];
 
-	Packet p(txbuffer, bufsize, id, 0x02, 4,
+	// Length = 4
+	Packet p(txbuffer, bufsize, id, XL_INSTR_READ, 4,
 			 DXL_LOBYTE(Address),
 			 DXL_HIBYTE(Address),
 			 DXL_LOBYTE(size),
@@ -361,6 +345,21 @@ int XL320::RXsendPacket(int id, int Address, int size)
 	// stream->write(txbuffer,bufsize);
 
 	return p.getSize();
+}
+
+int XL320::flush()
+{
+	this->stream->flush();
+}
+
+void XL320::nDelay(uint32_t nTime)
+{
+	/*
+	uint32_t max;
+	for( max=0; max < nTime; max++){
+
+	}
+	*/
 }
 
 // from http://stackoverflow.com/a/133363/195061
@@ -484,12 +483,14 @@ XL320::Packet::Packet(
 	{
 		// [ff][ff][fd][00][id][len1][len2] { [data(length)] }
 		this->data_size = 7 + length;
-		this->data = (unsigned char *)malloc(data_size);
+		// this->data = (unsigned char *)malloc(data_size);
 		this->freeData = true;
 	}
 	else
 	{
-		this->data = data;
+		// this->data = data;
+		memcpy(this->data, data, data_size); // Use memcpy to copy the data
+
 		this->data_size = data_size;
 		this->freeData = false;
 	}
@@ -516,7 +517,9 @@ XL320::Packet::Packet(
 
 XL320::Packet::Packet(unsigned char *data, size_t size)
 {
-	this->data = data;
+	// this->data = data;
+	memcpy(this->data, data, data_size); // Use memcpy to copy the data
+
 	this->data_size = size;
 	this->freeData = false;
 }
@@ -539,14 +542,17 @@ void XL320::Packet::toStream(Stream &stream)
 	stream.println(this->getInstruction(), HEX);
 	stream.print("parameter count: ");
 	stream.println(this->getParameterCount(), DEC);
-	for (int i = 0; i < this->getParameterCount(); i++)
+
+	int parameterCount = this->getParameterCount();
+	for (int i = 0; i < parameterCount; i++)
 	{
 		stream.print(this->getParameter(i), HEX);
-		if (i < this->getParameterCount() - 1)
+		if (i < parameterCount - 1)
 		{
 			stream.print(",");
 		}
 	}
+
 	stream.println();
 	stream.print("valid: ");
 	stream.println(this->isValid() ? "yes" : "no");

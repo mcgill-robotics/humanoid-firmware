@@ -3,6 +3,8 @@
 #include "XL320.h"
 #include "HardwareSerial.h"
 
+#define DEBUG_PRINT 1
+
 // SERVO CONFIGURATION
 XL320 robot;
 char rgb[] = "rgbypcwo";
@@ -16,6 +18,16 @@ float servo_pos_deg = 0;
 float map_float(float x, float in_min, float in_max, float out_min, float out_max)
 {
   return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}
+
+float raw2deg(float raw)
+{
+  return map_float(raw, 0, 1023, 0, 300);
+}
+
+float deg2raw(float deg)
+{
+  return map_float(deg, 0, 300, 0, 1023);
 }
 
 void process_serial_cmd()
@@ -46,7 +58,7 @@ void process_serial_cmd()
     {
       // Increment command
       float inc_deg = inputString.substring(2).toFloat(); // Extract number
-      servo_setpoint_raw = (servo_setpoint_raw + map_float(inc_deg, 0, 359.99, 0, 1023));
+      servo_setpoint_raw = (servo_setpoint_raw + deg2raw(inc_deg));
       SerialUSB.print("Incremented position by: ");
       SerialUSB.println(inc_deg);
     }
@@ -54,7 +66,7 @@ void process_serial_cmd()
     {
       // Set command
       servo_setpoint_deg = inputString.substring(2).toFloat(); // Extract and set new position
-      servo_setpoint_raw = map_float(servo_setpoint_deg, 0, 359.99, 0, 1023);
+      servo_setpoint_raw = deg2raw(servo_setpoint_deg);
       SerialUSB.print("Set position to: ");
       SerialUSB.println(servo_setpoint_deg);
     }
@@ -81,6 +93,9 @@ void servo_setup()
   // I like fast moving servos, so set the joint speed to max!
   // robot.setJointSpeed(servo_id, 1023 / 2);
   robot.setJointSpeed(servo_id, 1023);
+
+  servo_setpoint_raw = 512;
+  servo_setpoint_deg = raw2deg(servo_setpoint_raw);
 }
 
 void servo_loop()
@@ -104,8 +119,10 @@ void servo_loop()
   Serial1.clear();
 
   // Get state
-  servo_pos_raw = robot.getJointPosition(servo_id);
-  servo_pos_deg = map_float(servo_pos_raw, 0, 1023, 0, 359.99);
+  // servo_pos_raw = robot.getJointPosition(servo_id);
+  servo_pos_raw = robot.getJointPosition(servo_id, &SerialUSB);
+
+  servo_pos_deg = raw2deg(servo_pos_raw);
 
   delay(100);
 }
