@@ -19,24 +19,6 @@
 #ifndef XL320_H_
 #define XL320_H_
 
-/*INSTRUCTIONS*/
-#define XL_INSTR_PING 0x01
-#define XL_INSTR_READ 0x02
-#define XL_INSTR_WRITE 0x03
-#define XL_INSTR_REG_WRITE 0x04
-#define XL_INSTR_ACTION 0x05
-#define XL_INSTR_FACTORY_RESET 0x06
-#define XL_INSTR_REBOOT 0x08
-#define XL_INSTR_CLEAR 0x10
-#define XL_INSTR_CONTROL_TABLE_BACKUP 0x20
-#define XL_INSTR_STATUS_RETURN 0x55
-#define XL_INSTR_SYNC_READ 0x82
-#define XL_INSTR_SYNC_WRITE 0x83
-#define XL_INSTR_FAST_SYNC_READ 0x8A
-#define XL_INSTR_BULK_READ 0x92
-#define XL_INSTR_BULK_WRITE 0x93
-#define XL_INSTR_FAST_BULK_READ 0x9A
-
 /*EEPROM Area*/
 #define XL_MODEL_NUMBER_L 0
 #define XL_MODEL_NUMBER_H 1
@@ -112,7 +94,6 @@ public:
 	int getJointSpeed(int id);
 	int getJointLoad(int id);
 	int getJointTemperature(int id);
-	int queryID();
 	int isJointMoving(int id);
 
 	int sendPacket(int id, int Address, int value);
@@ -128,8 +109,7 @@ public:
 		bool freeData;
 
 	public:
-		// unsigned char *data;
-		char data[128];
+		unsigned char *data;
 		size_t data_size;
 
 		// wrap a received data stream in an Packet object for analysis

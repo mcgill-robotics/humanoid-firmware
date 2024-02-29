@@ -1,34 +1,32 @@
 #include <Arduino.h>
 
-#include "XL320.h"
 #include "HardwareSerial.h"
+#include "XL320.h"
 
-#define DEBUG_PRINT 1
+#define DEBUG_PRINT 0
 
 // SERVO CONFIGURATION
 XL320 robot;
 char rgb[] = "rgbypcwo";
-int servo_id = 16;
+int servo_id = 17;
 int led_color = 0;
+int setNewID = 0;
 float servo_setpoint_raw = 0;
 float servo_setpoint_deg = 0;
 float servo_pos_raw = 0;
 float servo_pos_deg = 0;
 
-float map_float(float x, float in_min, float in_max, float out_min, float out_max)
+float map_float(float x, float in_min, float in_max, float out_min,
+                float out_max)
 {
   return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 }
 
-float raw2deg(float raw)
-{
-  return map_float(raw, 0, 1023, 0, 300);
-}
+float raw2deg(float raw) { return map_float(raw, 0, 1023, 0, 300); }
 
-float deg2raw(float deg)
-{
-  return map_float(deg, 0, 300, 0, 1023);
-}
+float deg2raw(float deg) { return map_float(deg, 0, 300, 0, 1023); }
+
+bool validID(int id) { return (id >= 1 && id <= 253 && id != 200); }
 
 void process_serial_cmd()
 {
@@ -65,10 +63,26 @@ void process_serial_cmd()
     else if (inputString.startsWith("s "))
     {
       // Set command
-      servo_setpoint_deg = inputString.substring(2).toFloat(); // Extract and set new position
+      servo_setpoint_deg =
+          inputString.substring(2).toFloat(); // Extract and set new position
       servo_setpoint_raw = deg2raw(servo_setpoint_deg);
       SerialUSB.print("Set position to: ");
       SerialUSB.println(servo_setpoint_deg);
+    }
+    else if (inputString.startsWith("d "))
+    {
+      // Set ID command
+      int new_ID = inputString.substring(2).toInt(); // Extract ID
+      if (validID(new_ID))
+      {
+        setNewID = new_ID;
+        SerialUSB.print("Will set new ID to: ");
+        SerialUSB.println(setNewID);
+      }
+      else
+      {
+        SerialUSB.println("Invalid ID");
+      }
     }
     else
     {
@@ -101,6 +115,15 @@ void servo_setup()
 void servo_loop()
 {
   // LED test.. let's randomly set the colour (0-7)
+  if (setNewID)
+  {
+    robot.sendPacket(servo_id, XL_ID, setNewID);
+    SerialUSB.println("New ID sent to robot!");
+    SerialUSB.println("Don't forget to power cycle the servo!");
+    while (true)
+    { // loop because firmware needs ID update anyways
+    }
+  }
   robot.LED(servo_id, &rgb[random(0, 7)]);
 
   // SETPOINT TEST
@@ -119,8 +142,8 @@ void servo_loop()
   Serial1.clear();
 
   // Get state
-  // servo_pos_raw = robot.getJointPosition(servo_id);
-  servo_pos_raw = robot.getJointPosition(servo_id, &SerialUSB);
+  servo_pos_raw = robot.getJointPosition(servo_id);
+  // servo_pos_raw = robot.getJointPosition(servo_id, &SerialUSB);
 
   servo_pos_deg = raw2deg(servo_pos_raw);
 
@@ -149,8 +172,8 @@ void setup()
   while (!SerialUSB)
     ;
   servo_setup();
-  int id_found = robot.queryID();
-  SerialUSB.printf("Found servo ID: %d\n", id_found);
+  // int id_found = robot.queryID();
+  // SerialUSB.printf("Found servo ID: %d\n", id_found);
 }
 
 void loop()

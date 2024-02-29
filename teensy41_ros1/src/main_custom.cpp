@@ -1,12 +1,13 @@
 #include <Arduino.h>
-#include "XL320.h"
+
 #include "HardwareSerial.h"
+#include "XL320.h"
 
 // Include the ROS library
+#include "ServoState.h"
 #include "ros.h"
 #include "std_msgs/Float32MultiArray.h"
 #include "std_msgs/String.h"
-#include "ServoState.h"
 
 #define PID_PERIOD_US 10000
 
@@ -18,7 +19,8 @@ void servo_cmd_cb(const servo_node::ServoState &input_msg);
 servo_node::ServoState servo_fb_msg;
 servo_node::ServoState servo_cmd_msg;
 ros::Publisher servo_fb_pub("servo_fb", &servo_fb_msg);
-ros::Subscriber<servo_node::ServoState> servo_cmd_sub("servo_cmd", servo_cmd_cb);
+ros::Subscriber<servo_node::ServoState> servo_cmd_sub("servo_cmd",
+                                                      servo_cmd_cb);
 
 // SERVO CONFIGURATION
 XL320 robot;
@@ -30,7 +32,8 @@ float servo_pos_raw[1] = {0};
 float servo_pos_deg[1] = {0};
 float servo_setpoint_deg[1] = {0};
 
-float map_float(float x, float in_min, float in_max, float out_min, float out_max)
+float map_float(float x, float in_min, float in_max, float out_min,
+                float out_max)
 {
   return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 }
