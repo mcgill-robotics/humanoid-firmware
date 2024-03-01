@@ -85,8 +85,10 @@ public:
 
 	void TorqueON(int id);
 	void TorqueOFF(int id);
+	int broadcastPing(Stream *debugStream, byte *IDbuf);
 
 	void quickTest();
+	void setID(int oldID, int newID);
 
 	int getSpoonLoad();
 	int getJointPosition(int id);
