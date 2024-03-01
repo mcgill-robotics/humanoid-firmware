@@ -149,7 +149,8 @@ void XL320::TorqueOFF(int id)
 	nDelay(NANO_TIME_DELAY);
 }
 
-int XL320::broadcastPing(Stream *debugStream, byte *IDbuf){
+int XL320::broadcastPing(Stream *debugStream, byte *IDbuf)
+{
 
 	const int bufsize = 16;
 
@@ -162,7 +163,8 @@ int XL320::broadcastPing(Stream *debugStream, byte *IDbuf){
 	int size = p.getSize();
 	stream->write(txbuffer, size);
 	int return_val = this->readPacket(rxbuffer, 255);
-	while(return_val > 0){
+	while (return_val > 0)
+	{
 		Packet p(rxbuffer, 255);
 		p.toStream(*debugStream);
 		if (p.isValid())
@@ -172,7 +174,7 @@ int XL320::broadcastPing(Stream *debugStream, byte *IDbuf){
 		return_val = this->readPacket(rxbuffer, 255);
 	}
 	return numValidIDs;
-	}
+}
 
 void XL320::quickTest()
 {

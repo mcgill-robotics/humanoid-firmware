@@ -30,10 +30,11 @@ float deg2raw(float deg) { return map_float(deg, 0, 300, 0, 1023); }
 
 bool validID(int id) { return (id >= 1 && id <= 253 && id != 200); }
 
-bool validBaud(int newBaud ) { return (newBaud >= 0 && newBaud <= 3); }
+bool validBaud(int newBaud) { return (newBaud >= 0 && newBaud <= 3); }
 
-float servoSine(float offset, float amplitude, float w, float time_offset){
-  float time = millis()/1000.0 + time_offset;
+float servoSine(float offset, float amplitude, float w, float time_offset)
+{
+  float time = millis() / 1000.0 + time_offset;
   return offset + amplitude * sin(w * time);
 }
 
@@ -218,15 +219,19 @@ void setup()
 
   byte idBuf[16];
   int numIDs = robot.broadcastPing(&SerialUSB, idBuf);
-  if(numIDs){
+  if (numIDs)
+  {
     SerialUSB.print(numIDs);
     SerialUSB.print(" IDs found: ");
-    for(int i = 0; i < numIDs; i++){
+    for (int i = 0; i < numIDs; i++)
+    {
       SerialUSB.print(idBuf[i]);
       SerialUSB.print(",");
     }
     SerialUSB.println();
-  }else{
+  }
+  else
+  {
     SerialUSB.println("No IDs found.");
   }
   delay(3000);
