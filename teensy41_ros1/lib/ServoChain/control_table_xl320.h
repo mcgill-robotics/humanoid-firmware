@@ -2,6 +2,24 @@
 #ifndef CONTROL_TABLE_XL320
 #define CONTROL_TABLE_XL320
 
+// left leg defines
+#define LEFT_LEG_SERIAL Serial1
+#define LEFT_LEG_DIR_PIN 3
+#define LEFT_LEG_NUM_IDS 4
+#define LEFT_LEG_ANKLE_ID 20
+#define LEFT_LEG_KNEE_ID 17
+#define LEFT_LEG_HIP_PITCH_ID 18
+#define LEFT_LEG_HIP_ROLL_ID 19
+
+// right leg defines
+#define RIGHT_LEG_SERIAL Serial2
+#define RIGHT_LEG_DIR_PIN 9
+#define RIGHT_LEG_NUM_IDS 4
+#define RIGHT_LEG_ANKLE_ID 40
+#define RIGHT_LEG_KNEE_ID 37
+#define RIGHT_LEG_HIP_PITCH_ID 38
+#define RIGHT_LEG_HIP_ROLL_ID 39
+
 // EEPROM Control Table
 #define MODEL_NUMBER_ADR 0
 #define MODEL_NUMBER_SIZE 2
