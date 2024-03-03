@@ -1,21 +1,26 @@
 class ServoJoint:
-    def __init__(self, id=0, name="default_name"):
-        self.id = id
-        self.name = name
-        self.setpoint_raw = 0
-        self.pos_raw = 0
-        self.is_faulted = False
+    def __init__(self):
+        self.setpoint = 150.0
+        self.position = 150.0
+        self.velocity = 0.0
+        self.load = 0.0
+        
+    def setAngle(self, setpoint):
+        self.setpoint = setpoint
+        
+    def storeFeedback(self, fb_arr):
+        self.position = fb_arr[0]
+        self.velocity = fb_arr[1]
+        self.load = fb_arr[2]
+        
+    def getPosition(self):
+        return self.position
+    
+    def getVelocity(self):
+        return self.velocity
 
-    def get_pos_deg(self):
-        pos_deg = self.pos_raw * 360 / 1023
-        return pos_deg
-
-    def get_setpoint_deg(self):
-        setpoint_deg = self.setpoint_raw * 360 / 1023
-        return setpoint_deg
-
-    def set_pos_deg(self, pos_deg):
-        self.pos_raw = pos_deg * 1023 / 360
-
-    def set_setpoint_deg(self, setpoint_deg):
-        self.setpoint_raw = setpoint_deg * 1023 / 360
+    def getLoad(self):
+        return self.load
+    
+    def getSetpoint(self):
+        return self.setpoint

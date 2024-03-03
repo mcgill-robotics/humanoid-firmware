@@ -1,9 +1,8 @@
-
-
 #ifndef SERVO_CHAIN_H
 #define SERVO_CHAIN_H
 
 #include <HardwareSerial.h>
+#include <Arduino.h>
 #include <Stream.h>
 #include <inttypes.h>
 
@@ -38,16 +37,21 @@ class XL320Chain {
 
     void toStream(Stream &stream);
   };
+  void begin();
   int sendPacket(uint8_t id, int instruction, uint8_t *params, int length);
   int readPacket(unsigned char *buffer, size_t size);
-  int verifyIDs(uint8_t *id_list, int length);
-  int verifyIDs(uint8_t *id_list, int length, Stream *debugStream);
+  // int verifyIDs(uint8_t *id_list, int length);
+  // int verifyIDs(uint8_t *id_list, int length, Stream *debugStream);
   int getServoData(uint8_t *id_list, unsigned short *data_buffer, int length);
 
   int getServoData(uint8_t *id_list, unsigned short *data_buffer, int length,
                    Stream *debugStream);
+  void setJointSpeed(int id, int value);
   void setServoPositions(uint8_t *id_list, unsigned short *data_buffer,
                          int length);
+
+  int broadcastPing(Stream *debugStream, byte *IDbuf);
+  bool validateIDs(uint8_t* id_list, int length, Stream *debugStream);
 
   void torqueON(uint8_t *id_list, int length);
   void torqueOFF(uint8_t *id_list, int length);

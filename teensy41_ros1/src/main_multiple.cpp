@@ -38,35 +38,44 @@ uint8_t right_leg_ids[RIGHT_LEG_NUM_IDS] = {
 #endif
 
 float map_float(float x, float in_min, float in_max, float out_min,
-                float out_max) {
+                float out_max)
+{
   return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 }
 
 #ifdef LEFT_LEG_ON
 uint16_t left_leg_setpoints[LEFT_LEG_NUM_IDS] = {
-    0};  // hip roll, hip pitch, knee, ankle
-float left_leg_feedback[LEFT_LEG_NUM_IDS][3];  // in each ID, array with
-                                               // position, velocity and load
+    512};                                     // hip roll, hip pitch, knee, ankle
+float left_leg_feedback[LEFT_LEG_NUM_IDS][3]; // in each ID, array with
+                                              // position, velocity and load
 #endif
 
 #ifdef RIGHT_LEG_ON
 uint16_t right_leg_setpoints[RIGHT_LEG_NUM_IDS] = {
-    0};  // hip roll, hip pitch, knee, ankle
-float right_leg_feedback[RIGHT_LEG_NUM_IDS][3];  // in each ID, array with
-                                                 // position, velocity and load
+    0};                                         // hip roll, hip pitch, knee, ankle
+float right_leg_feedback[RIGHT_LEG_NUM_IDS][3]; // in each ID, array with
+                                                // position, velocity and load
 #endif
 
-int updatePositions() {
+void rawToFloat(unsigned short *input, float *output)
+{
+  output[0] = map_float(input[0], 0, 1023, 0, 300.00);                                                                             // pos in degrees
+  output[1] = (input[1] >= 1024) ? map_float(input[1] & 0x3FF, 0, 1023, 0, 33.3) : map_float(input[1] & 0x3FF, 0, 1023, 0, -33.3); // velocity in RPM
+  output[2] = (input[2] >= 1024) ? map_float(input[2] & 0x3FF, 0, 1023, 0, 1.0) : map_float(input[2] & 0x3FF, 0, 1023, 0, -1.0);   // velocity in RPM
+}
+
+int updatePositions()
+{
 // left leg updates
 #ifdef LEFT_LEG_ON
   unsigned short rcv_buf[3 * LEFT_LEG_NUM_IDS];
   int error =
       left_leg_bus.getServoData(left_leg_ids, rcv_buf, LEFT_LEG_NUM_IDS);
-  if (error) return error;
-  for (int i = 0; i < LEFT_LEG_NUM_IDS; i++) {
-    left_leg_feedback[i][0] = map_float(rcv_buf[3 * i], 0, 1023, 0, 359.99);
-    left_leg_feedback[i][1] = map_float(rcv_buf[3 * i + 1], 0, 1023, 0, 359.99);
-    left_leg_feedback[i][2] = map_float(rcv_buf[3 * i + 2], 0, 1023, 0, 359.99);
+  if (error)
+    return error;
+  for (int i = 0; i < LEFT_LEG_NUM_IDS; i++)
+  {
+    rawToFloat(&rcv_buf[3 * i], left_leg_feedback[i]);
   }
 #endif
 // right leg updates
@@ -74,8 +83,10 @@ int updatePositions() {
   unsigned short rcv_buf[3 * RIGHT_LEG_NUM_IDS];
   int error =
       right_leg_bus.getServoData(right_leg_ids, rcv_buf, RIGHT_LEG_NUM_IDS);
-  if (error) return error;
-  for (int i = 0; i < RIGHT_LEG_NUM_IDS; i++) {
+  if (error)
+    return error;
+  for (int i = 0; i < RIGHT_LEG_NUM_IDS; i++)
+  {
     right_leg_feedback[i][0] = map_float(rcv_buf[3 * i], 0, 1023, 0, 359.99);
     right_leg_feedback[i][1] =
         map_float(rcv_buf[3 * i + 1], 0, 1023, 0, 359.99);
@@ -86,7 +97,8 @@ int updatePositions() {
   return 0;
 }
 
-void sendSetpoints() {
+void sendSetpoints()
+{
 // left leg write
 #ifdef LEFT_LEG_ON
   left_leg_bus.setServoPositions(left_leg_ids, left_leg_setpoints,
@@ -99,11 +111,11 @@ void sendSetpoints() {
 #endif
 }
 
-void setup() {
+void setup()
+{
+
 #ifdef LEFT_LEG_ON
-  LEFT_LEG_SERIAL.begin(1000000, SERIAL_8N1_HALF_DUPLEX);
-  while (!LEFT_LEG_SERIAL)
-    ;
+  left_leg_bus.begin();
   servo_fb_msg.left_leg_hip_roll_fb = left_leg_feedback[0];
   servo_fb_msg.left_leg_hip_roll_fb_length = 3;
   servo_fb_msg.left_leg_hip_pitch_fb = left_leg_feedback[1];
@@ -114,11 +126,9 @@ void setup() {
   servo_fb_msg.left_leg_ankle_fb_length = 3;
 
   // add config msgs (maxspeed, max angles, PID, Torque ON)
+  left_leg_bus.torqueON(left_leg_ids, LEFT_LEG_NUM_IDS);
 #endif
 #ifdef RIGHT_LEG_ON
-  RIGHT_LEG_SERIAL.begin(1000000, SERIAL_8N1_HALF_DUPLEX);
-  while (!RIGHT_LEG_SERIAL)
-    ;
   servo_fb_msg.right_leg_hip_roll_fb = right_leg_feedback[0];
   servo_fb_msg.right_leg_hip_roll_fb_length = 3;
   servo_fb_msg.right_leg_hip_pitch_fb = right_leg_feedback[1];
@@ -134,14 +144,16 @@ void setup() {
   nh.subscribe(servo_cmd_sub);
   nh.advertise(servo_fb_pub);
   nh.negotiateTopics();
-  while (!nh.connected()) {
+  while (!nh.connected())
+  {
     nh.negotiateTopics();
   }
 
   lastTime = micros();
 }
 
-void loop() {
+void loop()
+{
   while (micros() < lastTime + CONTROL_LOOP_US)
     ;
   lastTime += CONTROL_LOOP_US;
@@ -149,7 +161,8 @@ void loop() {
   sendSetpoints();
 
   int error = updatePositions();
-  if (error) {
+  if (error)
+  {
     // add error handling
   }
 
@@ -158,7 +171,8 @@ void loop() {
   nh.spinOnce();
 }
 
-void servo_cmd_cb(const servo_node::ServoCommand &input_msg) {
+void servo_cmd_cb(const servo_node::ServoCommand &input_msg)
+{
 #ifdef LEFT_LEG_ON
   left_leg_setpoints[0] =
       map_float(input_msg.left_leg_hip_roll_setpoint, 0, 300.00, 0, 1023);

@@ -145,6 +145,8 @@ void servo_setup()
   servo_setpoint_deg[1] = raw2deg(servo_setpoint_raw[1]);
   servo_setpoint_deg[2] = raw2deg(servo_setpoint_raw[2]);
   servo_setpoint_deg[3] = raw2deg(servo_setpoint_raw[3]);
+
+  robot_bus.torqueON(servo_ids, 4);
 }
 
 void servo_loop()
@@ -252,7 +254,7 @@ void print_servo_state()
   SerialUSB.print(servo_setpoint_raw[3]);
   SerialUSB.print(", pos_raw: ");
   SerialUSB.println(servo_pos_raw[3]);
-  
+
   SerialUSB.println();
 }
 

@@ -305,7 +305,8 @@ int XL320Chain::getServoData(uint8_t *id_list, unsigned short *data_buffer,
 int XL320Chain::getServoData(uint8_t *id_list, unsigned short *data_buffer,
                              int length, Stream *debugStream)
 {
-  while (this->stream->available()){
+  while (this->stream->available())
+  {
     this->stream->read();
   }
   unsigned char buffer[255];
@@ -334,9 +335,9 @@ int XL320Chain::getServoData(uint8_t *id_list, unsigned short *data_buffer,
       {
         return -1; // invalid response
       }
-      data_buffer[i * 3 + 0] = (p.getParameter(0) << 8) + p.getParameter(1);
-      data_buffer[i * 3 + 1] = (p.getParameter(2) << 8) + p.getParameter(3);
-      data_buffer[i * 3 + 2] = (p.getParameter(4) << 8) + p.getParameter(5);
+      data_buffer[i * 3 + 0] = ((unsigned short)p.getParameter(2) << 8) | (unsigned char)p.getParameter(1);
+      data_buffer[i * 3 + 1] = ((unsigned short)p.getParameter(4) << 8) | (unsigned char)p.getParameter(3);
+      data_buffer[i * 3 + 2] = ((unsigned short)p.getParameter(6) << 8) | (unsigned char)p.getParameter(5);
     }
     else
     {
