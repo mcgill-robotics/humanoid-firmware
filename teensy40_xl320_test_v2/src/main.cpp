@@ -1,22 +1,27 @@
 #include <Arduino.h>
 
 #include "HardwareSerial.h"
+#include "ServoChain.h"
 #include "XL320.h"
 
 #define DEBUG_PRINT 0
 
 // SERVO CONFIGURATION
 XL320 robot;
+XL320Chain robot_bus(9, &Serial1);
 char rgb[] = "rgbypcwo";
-int servo_id1 = 17;
-int servo_id2 = 20;
+int servo_id1 = 20;
+int servo_id2 = 21;
+int servo_id3 = 22;
+int servo_id4 = 23;
 int led_color = 0;
 int setNewID = 0;
 int setNewBaud = -1;
-float servo_setpoint_raw[2] = {0};
-float servo_setpoint_deg[2] = {0};
-float servo_pos_raw[2] = {0};
-float servo_pos_deg[2] = {0};
+unsigned short servo_setpoint_raw[4] = {0};
+float servo_setpoint_deg[4] = {0};
+unsigned short servo_pos_raw[4] = {0};
+float servo_pos_deg[4] = {0};
+uint8_t servo_ids[4] = {servo_id1, servo_id2, servo_id3, servo_id4};
 
 float map_float(float x, float in_min, float in_max, float out_min,
                 float out_max)
@@ -123,10 +128,10 @@ void servo_setup()
 {
   // Talking standard serial, so connect servo data line to Digital TX 1
   // Comment out this line to talk software serial
-  Serial1.begin(1000000, SERIAL_8N1_HALF_DUPLEX);
+  robot_bus.begin();
 
   // Initialise your robot
-  robot.begin(Serial1); // Hand in the serial object you're using
+  // robot.begin(Serial1); // Hand in the serial object you're using
 
   // I like fast moving servos, so set the joint speed to max!
   // robot.setJointSpeed(servo_id, 1023 / 2);
@@ -134,8 +139,12 @@ void servo_setup()
 
   servo_setpoint_raw[0] = 512;
   servo_setpoint_raw[1] = 512;
+  servo_setpoint_raw[2] = 512;
+  servo_setpoint_raw[3] = 512;
   servo_setpoint_deg[0] = raw2deg(servo_setpoint_raw[0]);
   servo_setpoint_deg[1] = raw2deg(servo_setpoint_raw[1]);
+  servo_setpoint_deg[2] = raw2deg(servo_setpoint_raw[2]);
+  servo_setpoint_deg[3] = raw2deg(servo_setpoint_raw[3]);
 }
 
 void servo_loop()
@@ -144,12 +153,17 @@ void servo_loop()
   // robot.LED(servo_id, &rgb[random(0, 7)]);
   servo_setpoint_deg[0] = servoSine(150, 50, 1.59, 0);
   servo_setpoint_deg[1] = servoSine(150, 50, 1.59, -5);
+  servo_setpoint_deg[2] = servoSine(150, 20, 1.59, -7.5);
+  servo_setpoint_deg[3] = servoSine(150, 20, 1.59, -2.5);
   servo_setpoint_raw[0] = deg2raw(servo_setpoint_deg[0]);
   servo_setpoint_raw[1] = deg2raw(servo_setpoint_deg[1]);
+  servo_setpoint_raw[2] = deg2raw(servo_setpoint_deg[2]);
+  servo_setpoint_raw[3] = deg2raw(servo_setpoint_deg[3]);
 
   // SETPOINT TEST
-  robot.moveJoint(servo_id1, servo_setpoint_raw[0]);
-  robot.moveJoint(servo_id2, servo_setpoint_raw[1]);
+  // robot.moveJoint(servo_id1, servo_setpoint_raw[0]);
+  // robot.moveJoint(servo_id2, servo_setpoint_raw[1]);
+  robot_bus.setServoPositions(servo_ids, servo_setpoint_raw, 4);
   // delay(100);
   //  Serial2.clear();
   // byte buffer[256];
@@ -165,6 +179,16 @@ void servo_loop()
 
   // Get state
   // delay(100);
+  unsigned short rcv_buf[255];
+  robot_bus.getServoData(servo_ids, rcv_buf, 4);
+  servo_pos_raw[0] = rcv_buf[0];
+  servo_pos_raw[1] = rcv_buf[3];
+  servo_pos_raw[2] = rcv_buf[6];
+  servo_pos_raw[3] = rcv_buf[9];
+  servo_pos_deg[0] = map_float(servo_pos_raw[0], 0, 1023, 0, 300.0);
+  servo_pos_deg[1] = map_float(servo_pos_raw[1], 0, 1023, 0, 300.0);
+  servo_pos_deg[2] = map_float(servo_pos_raw[2], 0, 1023, 0, 300.0);
+  servo_pos_deg[3] = map_float(servo_pos_raw[3], 0, 1023, 0, 300.0);
   // int temp_pos = robot.getJointPosition(servo_id1);
   // if (temp_pos >= 0){
   //   servo_pos_raw[0] = temp_pos;
@@ -206,6 +230,30 @@ void print_servo_state()
   SerialUSB.print(servo_setpoint_raw[1]);
   SerialUSB.print(", pos_raw: ");
   SerialUSB.println(servo_pos_raw[1]);
+
+  SerialUSB.print("Servo ID: ");
+  SerialUSB.print(servo_id3);
+  SerialUSB.print(", setpoint_deg: ");
+  SerialUSB.print(servo_setpoint_deg[2]);
+  SerialUSB.print(", pos_deg: ");
+  SerialUSB.print(servo_pos_deg[2]);
+  SerialUSB.print(", setpoint_raw: ");
+  SerialUSB.print(servo_setpoint_raw[2]);
+  SerialUSB.print(", pos_raw: ");
+  SerialUSB.println(servo_pos_raw[2]);
+
+  SerialUSB.print("Servo ID: ");
+  SerialUSB.print(servo_id4);
+  SerialUSB.print(", setpoint_deg: ");
+  SerialUSB.print(servo_setpoint_deg[3]);
+  SerialUSB.print(", pos_deg: ");
+  SerialUSB.print(servo_pos_deg[3]);
+  SerialUSB.print(", setpoint_raw: ");
+  SerialUSB.print(servo_setpoint_raw[3]);
+  SerialUSB.print(", pos_raw: ");
+  SerialUSB.println(servo_pos_raw[3]);
+  
+  SerialUSB.println();
 }
 
 void setup()
@@ -213,27 +261,38 @@ void setup()
   SerialUSB.begin(115200);
   while (!SerialUSB)
     ;
+  SerialUSB.println("Detected usb serial!");
   servo_setup();
+  SerialUSB.println("Done servo setup");
   // Serial1.begin(1000000, SERIAL_8N1_HALF_DUPLEX);
   // Serial2.begin(1000000, SERIAL_8N1_HALF_DUPLEX);
 
-  byte idBuf[16];
-  int numIDs = robot.broadcastPing(&SerialUSB, idBuf);
-  if (numIDs)
+  // byte idBuf[16];
+  // int numIDs = robot.broadcastPing(&SerialUSB, idBuf);
+  // if (numIDs)
+  // {
+  //   SerialUSB.print(numIDs);
+  //   SerialUSB.print(" IDs found: ");
+  //   for (int i = 0; i < numIDs; i++)
+  //   {
+  //     SerialUSB.print(idBuf[i]);
+  //     SerialUSB.print(",");
+  //   }
+  //   SerialUSB.println();
+  // }
+  // else
+  // {
+  //   SerialUSB.println("No IDs found.");
+  // }
+  bool valid = robot_bus.validateIDs(servo_ids, 4, nullptr);
+  SerialUSB.println("First validate run");
+  while (!valid)
   {
-    SerialUSB.print(numIDs);
-    SerialUSB.print(" IDs found: ");
-    for (int i = 0; i < numIDs; i++)
-    {
-      SerialUSB.print(idBuf[i]);
-      SerialUSB.print(",");
-    }
-    SerialUSB.println();
+    SerialUSB.println("IDs are not valid");
+    delay(1000);
+    valid = robot_bus.validateIDs(servo_ids, 4, nullptr);
   }
-  else
-  {
-    SerialUSB.println("No IDs found.");
-  }
+  SerialUSB.println("IDs are valid");
   delay(3000);
   // robot.sendPacket(servo_id, XL_ID, 20);
   // SerialUSB.print("New ID sent to robot: ");
@@ -262,10 +321,10 @@ void loop()
   // process_serial_cmd();
 
   servo_loop();
-  // if (millis() - last_print > 500)
-  // {
-  //   print_servo_state();
-  //   last_print = millis();
-  // }
-  delay(2);
+  if (millis() - last_print > 1500)
+  {
+    print_servo_state();
+    last_print = millis();
+  }
+  delay(8);
 }
