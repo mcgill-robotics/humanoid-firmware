@@ -7,7 +7,6 @@
 // Include the ROS library
 #include "ServoCommand.h"
 #include "ServoFeedback.h"
-// #include "PressureSensors.h"
 #include "ros.h"
 
 #define CONTROL_LOOP_US 10000
@@ -23,9 +22,7 @@ void servo_cmd_cb(const servo_node::ServoCommand &input_msg);
 
 servo_node::ServoCommand servo_cmd_msg;
 servo_node::ServoFeedback servo_fb_msg;
-// servo_node::PressureSensors pressure_fb;
 ros::Publisher servo_fb_pub("servosFeedback", &servo_fb_msg);
-// ros::Publisher pressure_fb_pub("pressureFeedback", &pressure_fb);
 ros::Subscriber<servo_node::ServoCommand> servo_cmd_sub("servosCommand",
                                                         servo_cmd_cb);
 
