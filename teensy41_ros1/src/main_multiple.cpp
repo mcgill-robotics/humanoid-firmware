@@ -10,11 +10,13 @@
 #include "ros.h"
 
 #define CONTROL_LOOP_US 10000
+#define LIGHTS_MILLIS 500
 
 #define LEFT_LEG_ON
 // #define RIGHT_LEG_ON
 
 static unsigned long lastTime;
+// static unsigned long lastMillis;
 ros::NodeHandle nh;
 void servo_cmd_cb(const servo_node::ServoCommand &input_msg);
 
@@ -45,9 +47,10 @@ float map_float(float x, float in_min, float in_max, float out_min,
 
 #ifdef LEFT_LEG_ON
 uint16_t left_leg_setpoints[LEFT_LEG_NUM_IDS] = {
-    512};                                     // hip roll, hip pitch, knee, ankle
+    512, 512, 512, 512};                      // hip roll, hip pitch, knee, ankle
 float left_leg_feedback[LEFT_LEG_NUM_IDS][3]; // in each ID, array with
                                               // position, velocity and load
+// uint8_t left_leg_colors[LEFT_LEG_NUM_IDS] = {3, 2, 3, 2};
 #endif
 
 #ifdef RIGHT_LEG_ON
@@ -111,6 +114,40 @@ void sendSetpoints()
 #endif
 }
 
+// void toggleLights()
+// {
+//   // left leg lights
+// #ifdef LEFT_LEG_ON
+//   for (int i = 0; i < LEFT_LEG_NUM_IDS; i++)
+//   {
+//     if (left_leg_colors[i] == 2)
+//     {
+//       left_leg_colors[i] = 3;
+//     }
+//     else
+//     {
+//       left_leg_colors[i] = 2;
+//     }
+//   }
+//   left_leg_bus.setLEDs(left_leg_ids, left_leg_colors, LEFT_LEG_NUM_IDS);
+// #endif
+//   // right leg lights
+// #ifdef RIGHT_LEG_ON
+//   for (int i = 0; i < RIGHT_LEG_NUM_IDS; i++)
+//   {
+//     if (right_leg_colors[i] == 2)
+//     {
+//       right_leg_colors[i] = 3;
+//     }
+//     else
+//     {
+//       right_leg_colors[i] = 2;
+//     }
+//   }
+//   right_leg_bus.setLEDs(right_leg_ids, right_leg_colors, RIGHT_LEG_NUM_IDS);
+// #endif
+// }
+
 void setup()
 {
 
@@ -150,6 +187,7 @@ void setup()
   }
 
   lastTime = micros();
+  // lastMillis = millis();
 }
 
 void loop()
@@ -157,6 +195,12 @@ void loop()
   while (micros() < lastTime + CONTROL_LOOP_US)
     ;
   lastTime += CONTROL_LOOP_US;
+
+  // if (millis() >= lastMillis + LIGHTS_MILLIS)
+  // {
+  //   lastMillis = millis();
+  //   toggleLights();
+  // }
 
   sendSetpoints();
 
