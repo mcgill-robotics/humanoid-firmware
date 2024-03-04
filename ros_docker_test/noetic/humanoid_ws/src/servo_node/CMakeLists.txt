@@ -53,6 +53,7 @@ add_message_files(
   ServoState.msg
   ServoCommand.msg
   ServoFeedback.msg
+  PressureSensors.msg
 )
 
 ## Generate services in the 'srv' folder
