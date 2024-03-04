@@ -1,0 +1,10 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Flash Firmware",
+            "type": "shell",
+            "command": "JLinkExe -device STM32F103C8 -if SWD -speed 4000 -CommanderScript flash.jlink"
+        }
+    ]
+}

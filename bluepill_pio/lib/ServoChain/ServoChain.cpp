@@ -16,8 +16,9 @@ XL320Chain::XL320Chain(uint8_t dirPin, HardwareSerial *stream)
 
 void XL320Chain::begin()
 {
-  ((HardwareSerial *)(this->stream))->begin(1000000, SERIAL_8N1_HALF_DUPLEX);
-  ((HardwareSerial *)(this->stream))->transmitterEnable(this->dirPin);
+  // ((HardwareSerial *)(this->stream))->begin(1000000, SERIAL_8N1_HALF_DUPLEX);
+  ((HardwareSerial *)(this->stream))->setHalfDuplex();
+  // ((HardwareSerial *)(this->stream))->transmitterEnable(this->dirPin);
   ((HardwareSerial *)(this->stream))->setTimeout(2);
 }
 
@@ -124,7 +125,10 @@ int XL320Chain::broadcastPing(Stream *debugStream, byte *IDbuf)
   Packet p(txbuffer, bufsize, 0xFE, 0x01, 0, nullptr);
 
   int size = p.getSize();
+  digitalWrite(this->dirPin, HIGH);
   stream->write(txbuffer, size);
+  this->stream->flush();
+  digitalWrite(this->dirPin, LOW);
   int return_val = this->readPacket(rxbuffer, 255);
   while (return_val > 0)
   {
@@ -177,13 +181,19 @@ int XL320Chain::sendPacket(uint8_t id, int instruction, uint8_t *params,
   if (length)
   {
     Packet p(txbuffer, 10 + length, id, instruction, length, params);
+    digitalWrite(this->dirPin, HIGH);
     this->stream->write(txbuffer, p.getSize());
+    this->stream->flush();
+    digitalWrite(this->dirPin, LOW);
     return p.getSize();
   }
   else
   {
     Packet p(txbuffer, 10, id, instruction, 0, nullptr);
+    digitalWrite(this->dirPin, HIGH);
     this->stream->write(txbuffer, p.getSize());
+    this->stream->flush();
+    digitalWrite(this->dirPin, LOW);
     return p.getSize();
   }
 }

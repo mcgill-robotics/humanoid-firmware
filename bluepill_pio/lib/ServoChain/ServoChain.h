@@ -1,20 +1,21 @@
 #ifndef SERVO_CHAIN_H
 #define SERVO_CHAIN_H
 
-#include <HardwareSerial.h>
 #include <Arduino.h>
 #include <Stream.h>
 #include <inttypes.h>
 
 #include "control_table_xl320.h"
 
-class XL320Chain {
- public:
+class XL320Chain
+{
+public:
   XL320Chain(uint8_t dirPin, HardwareSerial *stream);
-  class Packet {
+  class Packet
+  {
     bool freeData;
 
-   public:
+  public:
     unsigned char *data;
     size_t data_size;
 
@@ -51,7 +52,7 @@ class XL320Chain {
                          int length);
 
   int broadcastPing(Stream *debugStream, byte *IDbuf);
-  bool validateIDs(uint8_t* id_list, int length, Stream *debugStream);
+  bool validateIDs(uint8_t *id_list, int length, Stream *debugStream);
 
   void torqueON(uint8_t *id_list, int length);
   void torqueOFF(uint8_t *id_list, int length);
@@ -64,7 +65,7 @@ class XL320Chain {
   void servoWrite(uint8_t id, uint8_t *data_buffer, int numParams,
                   uint8_t addr);
 
- private:
+private:
   volatile uint8_t dirPin;
   Stream *stream;
 };
@@ -72,4 +73,4 @@ class XL320Chain {
 unsigned short update_crc(unsigned short crc_accum, unsigned char *data_blk_ptr,
                           unsigned short data_blk_size);
 
-#endif  // SERVO_CHAIN_H
+#endif // SERVO_CHAIN_H
