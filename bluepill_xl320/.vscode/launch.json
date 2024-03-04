@@ -1,0 +1,25 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug STM32 Blue Pill with J-Link",
+            "type": "cortex-debug",
+            "request": "launch",
+            // "servertype": "external",
+            "servertype": "jlink",
+            "cwd": "${workspaceRoot}",
+            "executable": "./Debug/bluepill_xl320.elf",
+            "interface": "swd",
+            "device": "STM32F103C8",
+            "armToolchainPath": "C:/ST/STM32CubeIDE_1.10.1/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.11.3.rel1.win32_1.1.1.202309131626/tools/bin",
+            "gdbPath": "C:/ST/STM32CubeIDE_1.10.1/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.11.3.rel1.win32_1.1.1.202309131626/tools/bin/arm-none-eabi-gdb.exe",
+            "runToEntryPoint": "main",
+            "gdbTarget": "localhost:3333",
+            "toolchainPrefix": "arm-none-eabi-",
+
+            // "svdFile": "<path_to_svd_file>/STM32F103x8.svd",
+            // "runToEntryPoint": "true",
+            // "preLaunchTask": "your build task name here" // This should match a task defined in tasks.json that builds your project
+        }
+    ]
+}

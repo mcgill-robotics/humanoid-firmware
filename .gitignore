@@ -3,3 +3,14 @@ logs/
 build/
 .DS_Store
 thumbs.db
+
+# Object files
+*.o
+*.ko
+*.obj
+*.elf
+
+*/language.settings.xml
+*.metadata
+# Mac OS specific
+*.DS_Store
