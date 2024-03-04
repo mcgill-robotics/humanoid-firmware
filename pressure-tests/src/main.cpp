@@ -1,4 +1,12 @@
 #include <Arduino.h>
+#include "ServoChain.h"
+
+#define LEFT_FORWARDS_PIN 14
+#define RIGHT_FORWARDS_PIN 15
+#define LEFT_BACKWARDS_PIN 16
+#define RIGHT_BACKWARDS_PIN 17
+
+XL320Chain bus;
 
 void setup()
 {
