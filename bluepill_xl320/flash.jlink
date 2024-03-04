@@ -1,0 +1,24 @@
+// Specify the device
+device STM32F103C8
+
+// Select the interface and speed
+si SWD
+speed 4000
+
+// Reset the device
+r
+
+// Erase the device's flash memory
+erase
+
+// Load the ELF file into the device's flash memory
+loadfile ./Debug/bluepill_xl320.elf
+
+// Reset the device after programming
+r
+
+// Optionally, start the program execution
+g
+
+// Exit JLinkExe
+exit

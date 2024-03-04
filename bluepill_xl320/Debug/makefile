@@ -84,8 +84,8 @@ all: main-build
 main-build: bluepill_xl320.elf secondary-outputs
 
 # Tool invocations
-bluepill_xl320.elf bluepill_xl320.map: $(OBJS) $(USER_OBJS) C:\Users\john\STM32CubeIDE\workspace_1.13.1\bluepill_xl320\STM32F103C8TX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-g++ -o "bluepill_xl320.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m3 -T"C:\Users\john\STM32CubeIDE\workspace_1.13.1\bluepill_xl320\STM32F103C8TX_FLASH.ld" --specs=nosys.specs -Wl,-Map="bluepill_xl320.map" -Wl,--gc-sections -static --specs=nano.specs -mfloat-abi=soft -mthumb -Wl,--start-group -lc -lm -lstdc++ -lsupc++ -Wl,--end-group
+bluepill_xl320.elf bluepill_xl320.map: $(OBJS) $(USER_OBJS) C:\Users\john\Documents\DATA\programming_dirty\robotics_dirty\humanoid-firmware\bluepill_xl320\STM32F103C8TX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-g++ -o "bluepill_xl320.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m3 -T"C:\Users\john\Documents\DATA\programming_dirty\robotics_dirty\humanoid-firmware\bluepill_xl320\STM32F103C8TX_FLASH.ld" --specs=nosys.specs -Wl,-Map="bluepill_xl320.map" -Wl,--gc-sections -static --specs=nano.specs -mfloat-abi=soft -mthumb -Wl,--start-group -lc -lm -lstdc++ -lsupc++ -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 
