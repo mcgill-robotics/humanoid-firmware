@@ -18,13 +18,13 @@
 static unsigned long lastTime;
 // static unsigned long lastMillis;
 ros::NodeHandle nh;
-void servo_cmd_cb(const servo_node::ServoCommand &input_msg);
+void servo_cmd_cb(const humanoid_msgs::ServoCommand &input_msg);
 
-servo_node::ServoCommand servo_cmd_msg;
-servo_node::ServoFeedback servo_fb_msg;
+humanoid_msgs::ServoCommand servo_cmd_msg;
+humanoid_msgs::ServoFeedback servo_fb_msg;
 ros::Publisher servo_fb_pub("servosFeedback", &servo_fb_msg);
-ros::Subscriber<servo_node::ServoCommand> servo_cmd_sub("servosCommand",
-                                                        servo_cmd_cb);
+ros::Subscriber<humanoid_msgs::ServoCommand> servo_cmd_sub("servosCommand",
+                                                           servo_cmd_cb);
 
 #ifdef LEFT_LEG_ON
 XL320Chain left_leg_bus(LEFT_LEG_DIR_PIN, &LEFT_LEG_SERIAL);
@@ -215,7 +215,7 @@ void loop()
   nh.spinOnce();
 }
 
-void servo_cmd_cb(const servo_node::ServoCommand &input_msg)
+void servo_cmd_cb(const humanoid_msgs::ServoCommand &input_msg)
 {
 #ifdef LEFT_LEG_ON
   left_leg_setpoints[0] =

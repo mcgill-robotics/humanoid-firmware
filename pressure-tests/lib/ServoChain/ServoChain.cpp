@@ -4,9 +4,6 @@
 
 #define LOBYTE(w) ((unsigned char)(((unsigned long)(w)) & 0xff))
 #define HIBYTE(w) ((unsigned char)((((unsigned long)(w)) >> 8) & 0xff))
-#define XL320BYTE_TO_SHORT(w)                                     \
-  ((unsigned short)((unsigned char)(p.getParameter(w + 1) << 8) + \
-                    (unsigned char)(p.getParameter(w))))
 
 XL320Chain::XL320Chain(uint8_t dirPin, HardwareSerial *stream)
 {
@@ -17,6 +14,13 @@ XL320Chain::XL320Chain(uint8_t dirPin, HardwareSerial *stream)
 void XL320Chain::begin()
 {
   ((HardwareSerial *)(this->stream))->begin(1000000, SERIAL_8N1_HALF_DUPLEX);
+  ((HardwareSerial *)(this->stream))->transmitterEnable(this->dirPin);
+  ((HardwareSerial *)(this->stream))->setTimeout(100);
+}
+
+void XL320Chain::beginFullDuplex()
+{
+  ((HardwareSerial *)(this->stream))->begin(1000000);
   ((HardwareSerial *)(this->stream))->transmitterEnable(this->dirPin);
   ((HardwareSerial *)(this->stream))->setTimeout(2);
 }
@@ -48,6 +52,7 @@ int XL320Chain::readPacket(unsigned char *BUFFER, size_t SIZE)
   {
     STATE(start)
     {
+      // SerialUSB.println("Start");
       if (THISBYTE == 0xFF)
         NEXTSTATE(header_ff_1);
       I = 0;
@@ -55,6 +60,7 @@ int XL320Chain::readPacket(unsigned char *BUFFER, size_t SIZE)
     }
     STATE(header_ff_1)
     {
+      // SerialUSB.println("header_ff_1");
       if (THISBYTE == 0xFF)
         NEXTSTATE(header_ff_2);
       I = 0;
@@ -62,6 +68,7 @@ int XL320Chain::readPacket(unsigned char *BUFFER, size_t SIZE)
     }
     STATE(header_ff_2)
     {
+      // SerialUSB.println("header_ff_2");
       if (THISBYTE == 0xFD)
         NEXTSTATE(header_fd);
       // yet more 0xFF's? stay in this state
@@ -73,38 +80,54 @@ int XL320Chain::readPacket(unsigned char *BUFFER, size_t SIZE)
     }
     STATE(header_fd)
     {
+      // SerialUSB.println("header_fd");
       // reading reserved, could be anything in theory, normally 0
     }
     STATE(header_reserved)
     {
+      // SerialUSB.println("header_reserved");
       // id = THISBYTE
     }
-    STATE(id) { length = THISBYTE; }
+    STATE(id)
+    {
+      // SerialUSB.println("id");
+      length = THISBYTE;
+    }
     STATE(length_1)
     {
+      // SerialUSB.println("length_1");
       length += THISBYTE << 8; // eg: length=4
     }
-    STATE(length_2) {}
+    STATE(length_2)
+    {
+      // SerialUSB.println("length_2");
+    }
     STATE(instr)
     {
       // instr = THISBYTE
       // check length because
       // action and reboot commands have no parameters
+      // SerialUSB.println("instr");
       if (I - length >= 5)
         NEXTSTATE(checksum_1);
     }
     STATE(params)
     {
       // check length and maybe skip to checksum
+      // SerialUSB.println("params");
       if (I - length >= 5)
         NEXTSTATE(checksum_1);
       // or keep reading params
       NEXTSTATE(params);
     }
-    STATE(checksum_1) {}
+    STATE(checksum_1)
+    {
+      // SerialUSB.println("checksum1");
+    }
     STATE(checksum_2)
     {
       // done
+      // SerialUSB.println("checksum2");
       return I;
     }
     OVERFLOW { return -1; }

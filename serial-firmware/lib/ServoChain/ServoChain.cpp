@@ -323,7 +323,7 @@ int XL320Chain::getServoData(uint8_t *id_list, unsigned short *data_buffer,
   }
   sendPacket(0xFE, 0x82, send_params, length + 4); // sync read
   this->stream->flush();
-
+  delayMicroseconds(50);
   for (int i = 0; i < length; i++)
   {
     if (readPacket(buffer, 255) > 0)
