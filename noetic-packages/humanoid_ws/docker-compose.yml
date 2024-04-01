@@ -1,17 +1,21 @@
 version: '3'
 services:
   ros_noetic:
-    image: ros:noetic-ros-core-focal
+    build: .  # Look for the Dockerfile in the current directory
+    # image: ros:noetic-ros-core-focal
     container_name: ros_noetic_core
     privileged: true
     volumes:
-      - ./humanoid_ws:/root/ros_workspace # Map your ROS project directory to the container
+      - ./src:/root/catkin_ws/src # Map your ROS project directory to the container
       - ./docker-entrypoint.sh:/ros_entrypoint.sh # Mount the entrypoint script
       - /dev:/dev # Mount the /dev directory to the container, for ODrive USB access
     environment:
       - UDEV=on
     networks:
       - ros_network
+    ports:
+      - "5900:5900" # Expose VNC server port
+      - "5901:5901" # Expose VNC server port
     # devices:
       # - "/dev/tty.usbmodem3838345835391:/dev/ttyODrive"
     entrypoint: ["/ros_entrypoint.sh"]

@@ -166,6 +166,7 @@ void setup()
   left_leg_bus.torqueON(left_leg_ids, LEFT_LEG_NUM_IDS);
 #endif
 #ifdef RIGHT_LEG_ON
+  right_leg_bus.begin();
   servo_fb_msg.right_leg_hip_roll_fb = right_leg_feedback[0];
   servo_fb_msg.right_leg_hip_roll_fb_length = 3;
   servo_fb_msg.right_leg_hip_pitch_fb = right_leg_feedback[1];
@@ -174,6 +175,7 @@ void setup()
   servo_fb_msg.right_leg_knee_fb_length = 3;
   servo_fb_msg.right_leg_ankle_fb = right_leg_feedback[3];
   servo_fb_msg.right_leg_ankle_fb_length = 3;
+  right_leg_bus.torqueON(right_leg_ids, RIGHT_LEG_NUM_IDS);
 #endif
 
   // ROS stuff
