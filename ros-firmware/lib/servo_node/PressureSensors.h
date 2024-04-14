@@ -1,12 +1,12 @@
-#ifndef _ROS_servo_node_PressureSensors_h
-#define _ROS_servo_node_PressureSensors_h
+#ifndef _ROS_humanoid_msgs_PressureSensors_h
+#define _ROS_humanoid_msgs_PressureSensors_h
 
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
 #include "ros/msg.h"
 
-namespace servo_node
+namespace humanoid_msgs
 {
 
   class PressureSensors : public ros::Msg
@@ -221,7 +221,7 @@ namespace servo_node
      return offset;
     }
 
-    virtual const char * getType() override { return "servo_node/PressureSensors"; };
+    virtual const char * getType() override { return "humanoid_msgs/PressureSensors"; };
     virtual const char * getMD5() override { return "945eced6179d93a1274f5acf26fbad42"; };
 
   };

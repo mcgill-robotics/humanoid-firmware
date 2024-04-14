@@ -1,12 +1,12 @@
-#ifndef _ROS_servo_node_ServoCommand_h
-#define _ROS_servo_node_ServoCommand_h
+#ifndef _ROS_humanoid_msgs_ServoCommand_h
+#define _ROS_humanoid_msgs_ServoCommand_h
 
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
 #include "ros/msg.h"
 
-namespace servo_node
+namespace humanoid_msgs
 {
 
   class ServoCommand : public ros::Msg
@@ -413,7 +413,7 @@ namespace servo_node
      return offset;
     }
 
-    virtual const char * getType() override { return "servo_node/ServoCommand"; };
+    virtual const char * getType() override { return "humanoid_msgs/ServoCommand"; };
     virtual const char * getMD5() override { return "209cbbdc214ffab527afe09827fa5db3"; };
 
   };

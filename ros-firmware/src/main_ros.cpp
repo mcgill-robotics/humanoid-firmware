@@ -1,5 +1,5 @@
 #include "common.h"
-#if COMPILE_MODE == COMPILE_FOR_SERIAL
+#if COMPILE_MODE == COMPILE_FOR_ROS
 #include <Arduino.h>
 
 #include "HardwareSerial.h"
@@ -75,62 +75,12 @@ void rawToFloat(unsigned short *input, float *output)
   output[2] = (input[2] >= 1024) ? map_float(input[2] & 0x3FF, 0, 1023, 0, 1.0) : map_float(input[2] & 0x3FF, 0, 1023, 0, -1.0);   // velocity in RPM
 }
 
-void process_serial_cmd()
-{
-  static String inputString = "";             // A String to hold incoming data
-  static boolean inputStringComplete = false; // Whether the string is complete
-
-  while (SerialUSB.available())
-  {
-    char inChar = (char)SerialUSB.read(); // Read each character
-    if (inChar == '\n')
-    {
-      inputStringComplete = true; // If newline, input is complete
-    }
-    else
-    {
-      inputString += inChar; // Add character to input
-    }
-  }
-
-  if (inputStringComplete)
-  {
-    SerialUSB.print("Received: ");
-    SerialUSB.println(inputString); // Echo the input for debugging
-
-    // Process the completed command
-    if (inputString.startsWith("i "))
-    {
-      // Increment command
-      float inc_deg = inputString.substring(2).toFloat(); // Extract number
-      servo_setpoint_raw = (servo_setpoint_raw + deg2raw(inc_deg));
-      SerialUSB.print("Incremented position by: ");
-      SerialUSB.println(inc_deg);
-    }
-    else if (inputString.startsWith("s "))
-    {
-      // Set command
-      servo_setpoint_deg = inputString.substring(2).toFloat(); // Extract and set new position
-      servo_setpoint_raw = deg2raw(servo_setpoint_deg);
-      SerialUSB.print("Set position to: ");
-      SerialUSB.println(servo_setpoint_deg);
-    }
-    else
-    {
-      SerialUSB.println("Unknown command");
-    }
-
-    // Clear the string for the next command
-    inputString = "";
-    inputStringComplete = false;
-  }
-}
-
 // Get the feedback from the servos
 int updatePositions()
 {
   unsigned short rcv_buf[3 * (RIGHT_LEG_NUM_IDS + LEFT_LEG_NUM_IDS)];
   int error = 0;
+// left leg updates
 #if LEFT_LEG_ON == 1
   error =
       left_leg_bus.getServoData(left_leg_ids, rcv_buf, LEFT_LEG_NUM_IDS);
@@ -141,6 +91,7 @@ int updatePositions()
     rawToFloat(&rcv_buf[3 * i], left_leg_feedback[i]);
   }
 #endif
+// right leg updates
 #if RIGHT_LEG_ON == 1
   error =
       right_leg_bus.getServoData(right_leg_ids, rcv_buf, RIGHT_LEG_NUM_IDS);
@@ -207,24 +158,94 @@ void sendSetpoints()
 
 void setup()
 {
-  SerialUSB.begin(115200);
+
+#if LEFT_LEG_ON == 1
+  left_leg_bus.begin();
+  servo_fb_msg.left_leg_hip_roll_fb = left_leg_feedback[0];
+  servo_fb_msg.left_leg_hip_roll_fb_length = 3;
+  servo_fb_msg.left_leg_hip_pitch_fb = left_leg_feedback[1];
+  servo_fb_msg.left_leg_hip_pitch_fb_length = 3;
+  servo_fb_msg.left_leg_knee_fb = left_leg_feedback[2];
+  servo_fb_msg.left_leg_knee_fb_length = 3;
+  servo_fb_msg.left_leg_ankle_fb = left_leg_feedback[3];
+  servo_fb_msg.left_leg_ankle_fb_length = 3;
+
+  // add config msgs (maxspeed, max angles, PID, Torque ON)
+  left_leg_bus.torqueON(left_leg_ids, LEFT_LEG_NUM_IDS);
+#endif
+#if RIGHT_LEG_ON == 1
+  right_leg_bus.begin();
+  servo_fb_msg.right_leg_hip_roll_fb = right_leg_feedback[0];
+  servo_fb_msg.right_leg_hip_roll_fb_length = 3;
+  servo_fb_msg.right_leg_hip_pitch_fb = right_leg_feedback[1];
+  servo_fb_msg.right_leg_hip_pitch_fb_length = 3;
+  servo_fb_msg.right_leg_knee_fb = right_leg_feedback[2];
+  servo_fb_msg.right_leg_knee_fb_length = 3;
+  servo_fb_msg.right_leg_ankle_fb = right_leg_feedback[3];
+  servo_fb_msg.right_leg_ankle_fb_length = 3;
+  right_leg_bus.torqueON(right_leg_ids, RIGHT_LEG_NUM_IDS);
+#endif
+
+  // ROS stuff
+  nh.initNode();
+  nh.subscribe(servo_cmd_sub);
+  nh.advertise(servo_fb_pub);
+  nh.negotiateTopics();
+  while (!nh.connected())
+  {
+    nh.negotiateTopics();
+  }
+
   lastTime = micros();
   // lastMillis = millis();
 }
 
 void loop()
 {
-  process_serial_cmd();
-  if (micros() - lastTime > CONTROL_LOOP_US)
-  {
-    lastTime = micros();
-    sendSetpoints();
+  while (micros() < lastTime + CONTROL_LOOP_US)
+    ;
+  lastTime += CONTROL_LOOP_US;
 
-    int error = updatePositions();
-    if (error)
-    {
-      // add error handling
-    }
+  // if (millis() >= lastMillis + LIGHTS_MILLIS)
+  // {
+  //   lastMillis = millis();
+  //   toggleLights();
+  // }
+
+  sendSetpoints();
+
+  int error = updatePositions();
+  if (error)
+  {
+    // add error handling
   }
+
+  servo_fb_pub.publish(&servo_fb_msg);
+
+  nh.spinOnce();
 }
-#endif // COMPILE_MODE == COMPILE_FOR_SERIAL
+
+void servo_cmd_cb(const humanoid_msgs::ServoCommand &input_msg)
+{
+#if LEFT_LEG_ON == 1
+  left_leg_setpoints[0] =
+      map_float(input_msg.left_leg_ankle_setpoint, 0, 300.00, 0, 1023);
+  left_leg_setpoints[1] =
+      map_float(input_msg.left_leg_knee_setpoint, 0, 300.00, 0, 1023);
+  left_leg_setpoints[2] =
+      map_float(input_msg.left_leg_hip_pitch_setpoint, 0, 300.00, 0, 1023);
+  left_leg_setpoints[3] =
+      map_float(input_msg.left_leg_hip_roll_setpoint, 0, 300.00, 0, 1023);
+#endif
+#if RIGHT_LEG_ON == 1
+  right_leg_setpoints[0] =
+      map_float(input_msg.right_leg_ankle_setpoint, 0, 300.00, 0, 1023);
+  right_leg_setpoints[1] =
+      map_float(input_msg.right_leg_knee_setpoint, 0, 300.00, 0, 1023);
+  right_leg_setpoints[2] =
+      map_float(input_msg.right_leg_hip_pitch_setpoint, 0, 300.00, 0, 1023);
+  right_leg_setpoints[3] =
+      map_float(input_msg.right_leg_hip_roll_setpoint, 0, 300.00, 0, 1023);
+#endif
+}
+#endif // COMPILE_MODE == COMPILE_FOR_ROS
