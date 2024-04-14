@@ -25,6 +25,7 @@ humanoid_msgs::ServoFeedback servo_fb_msg;
 ros::Publisher servo_fb_pub("servosFeedback", &servo_fb_msg);
 ros::Subscriber<humanoid_msgs::ServoCommand> servo_cmd_sub("servosCommand",
                                                            servo_cmd_cb);
+unsigned short rcv_buf[3 * (RIGHT_LEG_NUM_IDS + LEFT_LEG_NUM_IDS)];
 
 #if LEFT_LEG_ON == 1
 XL320Chain left_leg_bus(LEFT_LEG_DIR_PIN, &LEFT_LEG_SERIAL);
@@ -83,9 +84,8 @@ float deg2raw(float deg) { return map_float(deg, 0, 300, 0, 1023); }
 // Get the feedback from the servos
 int updatePositions()
 {
-  unsigned short rcv_buf[3 * (RIGHT_LEG_NUM_IDS + LEFT_LEG_NUM_IDS)];
+  memset(rcv_buf, 0, sizeof(rcv_buf));
   int error = 0;
-// left leg updates
 #if LEFT_LEG_ON == 1
   error =
       left_leg_bus.getServoData(left_leg_ids, rcv_buf, LEFT_LEG_NUM_IDS);
@@ -96,7 +96,6 @@ int updatePositions()
     rawToFloat(&rcv_buf[3 * i], left_leg_feedback[i]);
   }
 #endif
-// right leg updates
 #if RIGHT_LEG_ON == 1
   error =
       right_leg_bus.getServoData(right_leg_ids, rcv_buf, RIGHT_LEG_NUM_IDS);
@@ -104,11 +103,7 @@ int updatePositions()
     return error;
   for (int i = 0; i < RIGHT_LEG_NUM_IDS; i++)
   {
-    right_leg_feedback[i][0] = map_float(rcv_buf[3 * i], 0, 1023, 0, 359.99);
-    right_leg_feedback[i][1] =
-        map_float(rcv_buf[3 * i + 1], 0, 1023, 0, 359.99);
-    right_leg_feedback[i][2] =
-        map_float(rcv_buf[3 * i + 2], 0, 1023, 0, 359.99);
+    rawToFloat(&rcv_buf[3 * i], right_leg_feedback[i]);
   }
 #endif
   return 0;

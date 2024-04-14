@@ -7,24 +7,12 @@
 #include "ServoChain.h"
 #include "control_table_xl320.h"
 
-// Include the ROS library
-#include "ServoCommand.h"
-#include "ServoFeedback.h"
-#include "ros.h"
-
 #define CONTROL_LOOP_US 10000
 #define LIGHTS_MILLIS 500
 
 static unsigned long lastTime;
 // static unsigned long lastMillis;
-ros::NodeHandle nh;
-void servo_cmd_cb(const humanoid_msgs::ServoCommand &input_msg);
-
-humanoid_msgs::ServoCommand servo_cmd_msg;
-humanoid_msgs::ServoFeedback servo_fb_msg;
-ros::Publisher servo_fb_pub("servosFeedback", &servo_fb_msg);
-ros::Subscriber<humanoid_msgs::ServoCommand> servo_cmd_sub("servosCommand",
-                                                           servo_cmd_cb);
+unsigned short rcv_buf[3 * (RIGHT_LEG_NUM_IDS + LEFT_LEG_NUM_IDS)];
 
 #if LEFT_LEG_ON == 1
 XL320Chain left_leg_bus(LEFT_LEG_DIR_PIN, &LEFT_LEG_SERIAL);
@@ -53,7 +41,7 @@ uint16_t left_leg_setpoints[LEFT_LEG_NUM_IDS] = {
     512, 512, 512, 512, 512};                 // hip roll, hip pitch, knee, ankle
 float left_leg_feedback[LEFT_LEG_NUM_IDS][3]; // in each ID, array with
                                               // position, velocity and load
-// uint8_t left_leg_colors[LEFT_LEG_NUM_IDS] = {3, 2, 3, 2};
+                                              // uint8_t left_leg_colors[LEFT_LEG_NUM_IDS] = {3, 2, 3, 2};
 #endif
 
 #if RIGHT_LEG_ON == 1
@@ -118,14 +106,18 @@ void process_serial_cmd()
       float servo_setpoint_deg = inputString.substring(2).toFloat(); // Extract and set new position
       float servo_setpoint_raw = deg2raw(servo_setpoint_deg);
 
+#if LEFT_LEG_ON == 1
       for (int i = 0; i < LEFT_LEG_NUM_IDS; i++)
       {
         left_leg_setpoints[i] = servo_setpoint_raw;
       }
+#endif
+#if RIGHT_LEG_ON == 1
       for (int i = 0; i < RIGHT_LEG_NUM_IDS; i++)
       {
         right_leg_setpoints[i] = servo_setpoint_raw;
       }
+#endif
 
       SerialUSB.print("Set position to: ");
       SerialUSB.println(servo_setpoint_deg);
@@ -144,7 +136,7 @@ void process_serial_cmd()
 // Get the feedback from the servos
 int updatePositions()
 {
-  unsigned short rcv_buf[3 * (RIGHT_LEG_NUM_IDS + LEFT_LEG_NUM_IDS)];
+  memset(rcv_buf, 0, sizeof(rcv_buf));
   int error = 0;
 #if LEFT_LEG_ON == 1
   error =
@@ -223,6 +215,9 @@ void sendSetpoints()
 void setup()
 {
   SerialUSB.begin(115200);
+  while (!SerialUSB)
+    ;
+  SerialUSB.println("SerialUSB initialized");
   lastTime = micros();
   // lastMillis = millis();
 }
@@ -236,11 +231,16 @@ void loop()
     sendSetpoints();
 
     int error = updatePositions();
-    for (int i = 0; i < LEFT_LEG_NUM_IDS; i++)
+    for (uint32_t i = 0; i < LEFT_LEG_NUM_IDS; i++)
     {
       SerialUSB.printf("Left Leg ID: %d, Pos: %f, Vel: %f, Load: %f\n",
                        left_leg_ids[i], left_leg_feedback[i][0],
                        left_leg_feedback[i][1], left_leg_feedback[i][2]);
+    }
+    // Print rcv_buf to SerialUSB
+    for (uint32_t i = 0; i < sizeof(rcv_buf) / sizeof(rcv_buf[0]); i++)
+    {
+      SerialUSB.printf("rcv_buf[%d]: %d\n", i, rcv_buf[i]);
     }
     if (error)
     {
