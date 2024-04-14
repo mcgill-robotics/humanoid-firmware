@@ -1,6 +1,7 @@
 #include "common.h"
 #if COMPILE_MODE == COMPILE_FOR_ROS
 #include <Arduino.h>
+#include "helpers.cpp"
 
 #include "HardwareSerial.h"
 #include "ServoChain.h"
@@ -47,12 +48,6 @@ uint8_t right_leg_ids[RIGHT_LEG_NUM_IDS] = {
 };
 #endif
 
-float map_float(float x, float in_min, float in_max, float out_min,
-                float out_max)
-{
-  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
-}
-
 #if LEFT_LEG_ON == 1
 uint16_t left_leg_setpoints[LEFT_LEG_NUM_IDS] = {
     512, 512, 512, 512, 512};                 // hip roll, hip pitch, knee, ankle
@@ -68,12 +63,22 @@ float right_leg_feedback[RIGHT_LEG_NUM_IDS][3]; // in each ID, array with
                                                 // position, velocity and load
 #endif
 
+float map_float(float x, float in_min, float in_max, float out_min,
+                float out_max)
+{
+  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}
+
 void rawToFloat(unsigned short *input, float *output)
 {
   output[0] = map_float(input[0], 0, 1023, 0, 300.00);                                                                             // pos in degrees
   output[1] = (input[1] >= 1024) ? map_float(input[1] & 0x3FF, 0, 1023, 0, 33.3) : map_float(input[1] & 0x3FF, 0, 1023, 0, -33.3); // velocity in RPM
   output[2] = (input[2] >= 1024) ? map_float(input[2] & 0x3FF, 0, 1023, 0, 1.0) : map_float(input[2] & 0x3FF, 0, 1023, 0, -1.0);   // velocity in RPM
 }
+
+float raw2deg(float raw) { return map_float(raw, 0, 1023, 0, 300); }
+
+float deg2raw(float deg) { return map_float(deg, 0, 300, 0, 1023); }
 
 // Get the feedback from the servos
 int updatePositions()
@@ -161,28 +166,34 @@ void setup()
 
 #if LEFT_LEG_ON == 1
   left_leg_bus.begin();
-  servo_fb_msg.left_leg_hip_roll_fb = left_leg_feedback[0];
-  servo_fb_msg.left_leg_hip_roll_fb_length = 3;
-  servo_fb_msg.left_leg_hip_pitch_fb = left_leg_feedback[1];
-  servo_fb_msg.left_leg_hip_pitch_fb_length = 3;
-  servo_fb_msg.left_leg_knee_fb = left_leg_feedback[2];
-  servo_fb_msg.left_leg_knee_fb_length = 3;
-  servo_fb_msg.left_leg_ankle_fb = left_leg_feedback[3];
+  servo_fb_msg.left_leg_ankle_fb = left_leg_feedback[0];
   servo_fb_msg.left_leg_ankle_fb_length = 3;
+  servo_fb_msg.left_leg_knee_fb = left_leg_feedback[1];
+  servo_fb_msg.left_leg_knee_fb_length = 3;
+  servo_fb_msg.left_leg_hip_pitch_fb = left_leg_feedback[2];
+  servo_fb_msg.left_leg_hip_pitch_fb_length = 3;
+  servo_fb_msg.left_leg_hip_roll_fb = left_leg_feedback[3];
+  servo_fb_msg.left_leg_hip_roll_fb_length = 3;
+  servo_fb_msg.left_leg_hip_yaw_fb = left_leg_feedback[4];
+  servo_fb_msg.left_leg_hip_yaw_fb_length = 3;
 
   // add config msgs (maxspeed, max angles, PID, Torque ON)
   left_leg_bus.torqueON(left_leg_ids, LEFT_LEG_NUM_IDS);
 #endif
 #if RIGHT_LEG_ON == 1
   right_leg_bus.begin();
-  servo_fb_msg.right_leg_hip_roll_fb = right_leg_feedback[0];
-  servo_fb_msg.right_leg_hip_roll_fb_length = 3;
-  servo_fb_msg.right_leg_hip_pitch_fb = right_leg_feedback[1];
-  servo_fb_msg.right_leg_hip_pitch_fb_length = 3;
-  servo_fb_msg.right_leg_knee_fb = right_leg_feedback[2];
-  servo_fb_msg.right_leg_knee_fb_length = 3;
-  servo_fb_msg.right_leg_ankle_fb = right_leg_feedback[3];
+  servo_fb_msg.right_leg_ankle_fb = right_leg_feedback[0];
   servo_fb_msg.right_leg_ankle_fb_length = 3;
+  servo_fb_msg.right_leg_knee_fb = right_leg_feedback[1];
+  servo_fb_msg.right_leg_knee_fb_length = 3;
+  servo_fb_msg.right_leg_hip_pitch_fb = right_leg_feedback[2];
+  servo_fb_msg.right_leg_hip_pitch_fb_length = 3;
+  servo_fb_msg.right_leg_hip_roll_fb = right_leg_feedback[3];
+  servo_fb_msg.right_leg_hip_roll_fb_length = 3;
+  servo_fb_msg.right_leg_hip_yaw_fb = right_leg_feedback[4];
+  servo_fb_msg.right_leg_hip_yaw_fb_length = 3;
+
+  // add config msgs (maxspeed, max angles, PID, Torque ON)
   right_leg_bus.torqueON(right_leg_ids, RIGHT_LEG_NUM_IDS);
 #endif
 
@@ -202,27 +213,21 @@ void setup()
 
 void loop()
 {
-  while (micros() < lastTime + CONTROL_LOOP_US)
-    ;
-  lastTime += CONTROL_LOOP_US;
-
-  // if (millis() >= lastMillis + LIGHTS_MILLIS)
-  // {
-  //   lastMillis = millis();
-  //   toggleLights();
-  // }
-
-  sendSetpoints();
-
-  int error = updatePositions();
-  if (error)
+  if (micros() - lastTime > CONTROL_LOOP_US)
   {
-    // add error handling
-  }
+    lastTime = micros();
+    sendSetpoints();
 
+    int error = updatePositions();
+    if (error)
+    {
+      // add error handling
+    }
+  }
   servo_fb_pub.publish(&servo_fb_msg);
 
   nh.spinOnce();
+  delay(10);
 }
 
 void servo_cmd_cb(const humanoid_msgs::ServoCommand &input_msg)

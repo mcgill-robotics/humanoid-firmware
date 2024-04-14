@@ -1,6 +1,7 @@
 #include "common.h"
 #if COMPILE_MODE == COMPILE_FOR_SERIAL
 #include <Arduino.h>
+#include "helpers.cpp"
 
 #include "HardwareSerial.h"
 #include "ServoChain.h"
@@ -47,12 +48,6 @@ uint8_t right_leg_ids[RIGHT_LEG_NUM_IDS] = {
 };
 #endif
 
-float map_float(float x, float in_min, float in_max, float out_min,
-                float out_max)
-{
-  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
-}
-
 #if LEFT_LEG_ON == 1
 uint16_t left_leg_setpoints[LEFT_LEG_NUM_IDS] = {
     512, 512, 512, 512, 512};                 // hip roll, hip pitch, knee, ankle
@@ -68,12 +63,22 @@ float right_leg_feedback[RIGHT_LEG_NUM_IDS][3]; // in each ID, array with
                                                 // position, velocity and load
 #endif
 
+float map_float(float x, float in_min, float in_max, float out_min,
+                float out_max)
+{
+  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}
+
 void rawToFloat(unsigned short *input, float *output)
 {
   output[0] = map_float(input[0], 0, 1023, 0, 300.00);                                                                             // pos in degrees
   output[1] = (input[1] >= 1024) ? map_float(input[1] & 0x3FF, 0, 1023, 0, 33.3) : map_float(input[1] & 0x3FF, 0, 1023, 0, -33.3); // velocity in RPM
   output[2] = (input[2] >= 1024) ? map_float(input[2] & 0x3FF, 0, 1023, 0, 1.0) : map_float(input[2] & 0x3FF, 0, 1023, 0, -1.0);   // velocity in RPM
 }
+
+float raw2deg(float raw) { return map_float(raw, 0, 1023, 0, 300); }
+
+float deg2raw(float deg) { return map_float(deg, 0, 300, 0, 1023); }
 
 void process_serial_cmd()
 {
@@ -103,15 +108,25 @@ void process_serial_cmd()
     {
       // Increment command
       float inc_deg = inputString.substring(2).toFloat(); // Extract number
-      servo_setpoint_raw = (servo_setpoint_raw + deg2raw(inc_deg));
+      float servo_setpoint_raw = (servo_setpoint_raw + deg2raw(inc_deg));
       SerialUSB.print("Incremented position by: ");
       SerialUSB.println(inc_deg);
     }
     else if (inputString.startsWith("s "))
     {
       // Set command
-      servo_setpoint_deg = inputString.substring(2).toFloat(); // Extract and set new position
-      servo_setpoint_raw = deg2raw(servo_setpoint_deg);
+      float servo_setpoint_deg = inputString.substring(2).toFloat(); // Extract and set new position
+      float servo_setpoint_raw = deg2raw(servo_setpoint_deg);
+
+      for (int i = 0; i < LEFT_LEG_NUM_IDS; i++)
+      {
+        left_leg_setpoints[i] = servo_setpoint_raw;
+      }
+      for (int i = 0; i < RIGHT_LEG_NUM_IDS; i++)
+      {
+        right_leg_setpoints[i] = servo_setpoint_raw;
+      }
+
       SerialUSB.print("Set position to: ");
       SerialUSB.println(servo_setpoint_deg);
     }
@@ -221,6 +236,12 @@ void loop()
     sendSetpoints();
 
     int error = updatePositions();
+    for (int i = 0; i < LEFT_LEG_NUM_IDS; i++)
+    {
+      SerialUSB.printf("Left Leg ID: %d, Pos: %f, Vel: %f, Load: %f\n",
+                       left_leg_ids[i], left_leg_feedback[i][0],
+                       left_leg_feedback[i][1], left_leg_feedback[i][2]);
+    }
     if (error)
     {
       // add error handling
