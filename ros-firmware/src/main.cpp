@@ -155,11 +155,7 @@ int updatePositions()
     return error;
   for (int i = 0; i < RIGHT_LEG_NUM_IDS; i++)
   {
-    right_leg_feedback[i][0] = map_float(rcv_buf[3 * i], 0, 1023, 0, 359.99);
-    right_leg_feedback[i][1] =
-        map_float(rcv_buf[3 * i + 1], 0, 1023, 0, 359.99);
-    right_leg_feedback[i][2] =
-        map_float(rcv_buf[3 * i + 2], 0, 1023, 0, 359.99);
+    rawToFloat(&rcv_buf[3 * i], right_leg_feedback[i]);
   }
 #endif
   return 0;
@@ -168,6 +164,7 @@ int updatePositions()
 // Apply the setpoints to the servos
 void sendSetpoints()
 {
+  SerialUSB.println("sendSetpoints");
 #if LEFT_LEG_ON == 1
   left_leg_bus.setServoPositions(left_leg_ids, left_leg_setpoints,
                                  LEFT_LEG_NUM_IDS);
@@ -218,6 +215,14 @@ void setup()
   while (!SerialUSB)
     ;
   SerialUSB.println("SerialUSB initialized");
+#if LEFT_LEG_ON == 1
+  left_leg_bus.begin();
+  left_leg_bus.torqueON(left_leg_ids, LEFT_LEG_NUM_IDS);
+#endif
+#if RIGHT_LEG_ON == 1
+  right_leg_bus.begin();
+  right_leg_bus.torqueON(right_leg_ids, RIGHT_LEG_NUM_IDS);
+#endif
   lastTime = micros();
   // lastMillis = millis();
 }
@@ -227,25 +232,35 @@ void loop()
   process_serial_cmd();
   if (micros() - lastTime > CONTROL_LOOP_US)
   {
-    lastTime = micros();
     sendSetpoints();
 
     int error = updatePositions();
+    // Print rcv_buf to SerialUSB
+    for (uint32_t i = 0; i < sizeof(rcv_buf) / sizeof(rcv_buf[0]); i++)
+    {
+      SerialUSB.printf("rcv_buf[%d]: %d\n", i, rcv_buf[i]);
+    }
+#if LEFT_LEG_ON == 1
     for (uint32_t i = 0; i < LEFT_LEG_NUM_IDS; i++)
     {
       SerialUSB.printf("Left Leg ID: %d, Pos: %f, Vel: %f, Load: %f\n",
                        left_leg_ids[i], left_leg_feedback[i][0],
                        left_leg_feedback[i][1], left_leg_feedback[i][2]);
     }
-    // Print rcv_buf to SerialUSB
-    for (uint32_t i = 0; i < sizeof(rcv_buf) / sizeof(rcv_buf[0]); i++)
+#endif
+#if RIGHT_LEG_ON == 1
+    for (uint32_t i = 0; i < RIGHT_LEG_NUM_IDS; i++)
     {
-      SerialUSB.printf("rcv_buf[%d]: %d\n", i, rcv_buf[i]);
+      SerialUSB.printf("Right Leg ID: %d, Pos: %f, Vel: %f, Load: %f\n",
+                       right_leg_ids[i], right_leg_feedback[i][0],
+                       right_leg_feedback[i][1], right_leg_feedback[i][2]);
     }
+#endif
     if (error)
     {
       // add error handling
     }
+    lastTime = micros();
   }
 }
 #endif // COMPILE_MODE == COMPILE_FOR_SERIAL

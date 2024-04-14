@@ -15,6 +15,8 @@
 #define CONTROL_LOOP_US 10000
 #define LIGHTS_MILLIS 500
 
+#define HWSERIAL Serial3
+
 static unsigned long lastTime;
 // static unsigned long lastMillis;
 ros::NodeHandle nh;
@@ -158,7 +160,6 @@ void sendSetpoints()
 
 void setup()
 {
-
 #if LEFT_LEG_ON == 1
   left_leg_bus.begin();
   servo_fb_msg.left_leg_ankle_fb = left_leg_feedback[0];
@@ -236,6 +237,8 @@ void servo_cmd_cb(const humanoid_msgs::ServoCommand &input_msg)
       map_float(input_msg.left_leg_hip_pitch_setpoint, 0, 300.00, 0, 1023);
   left_leg_setpoints[3] =
       map_float(input_msg.left_leg_hip_roll_setpoint, 0, 300.00, 0, 1023);
+  left_leg_setpoints[4] =
+      map_float(input_msg.left_leg_hip_yaw_setpoint, 0, 300.00, 0, 1023);
 #endif
 #if RIGHT_LEG_ON == 1
   right_leg_setpoints[0] =
@@ -246,6 +249,8 @@ void servo_cmd_cb(const humanoid_msgs::ServoCommand &input_msg)
       map_float(input_msg.right_leg_hip_pitch_setpoint, 0, 300.00, 0, 1023);
   right_leg_setpoints[3] =
       map_float(input_msg.right_leg_hip_roll_setpoint, 0, 300.00, 0, 1023);
+  right_leg_setpoints[4] =
+      map_float(input_msg.right_leg_hip_yaw_setpoint, 0, 300.00, 0, 1023);
 #endif
 }
 #endif // COMPILE_MODE == COMPILE_FOR_ROS
