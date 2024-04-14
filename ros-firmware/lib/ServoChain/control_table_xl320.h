@@ -5,21 +5,23 @@
 // left leg defines
 #define LEFT_LEG_SERIAL Serial1
 #define LEFT_LEG_DIR_PIN 3
-#define LEFT_LEG_NUM_IDS 4
+#define LEFT_LEG_NUM_IDS 5
 #define LEFT_LEG_ANKLE_ID 20
 #define LEFT_LEG_KNEE_ID 21
 #define LEFT_LEG_HIP_PITCH_ID 22
 #define LEFT_LEG_HIP_ROLL_ID 23
+#define LEFT_LEG_HIP_YAW_ID 24
 #define LEFT_LEG_PRESSURE_ID 19
 
 // right leg defines
 #define RIGHT_LEG_SERIAL Serial2
 #define RIGHT_LEG_DIR_PIN 9
-#define RIGHT_LEG_NUM_IDS 4
+#define RIGHT_LEG_NUM_IDS 5
 #define RIGHT_LEG_ANKLE_ID 10
 #define RIGHT_LEG_KNEE_ID 11
 #define RIGHT_LEG_HIP_PITCH_ID 12
 #define RIGHT_LEG_HIP_ROLL_ID 13
+#define RIGHT_LEG_HIP_YAW_ID 14
 #define RIGHT_LEG_PRESSURE_ID 9
 
 // EEPROM Control Table

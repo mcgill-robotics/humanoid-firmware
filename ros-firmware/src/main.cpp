@@ -28,15 +28,24 @@ ros::Subscriber<servo_node::ServoCommand> servo_cmd_sub("servosCommand",
 
 #ifdef LEFT_LEG_ON
 XL320Chain left_leg_bus(LEFT_LEG_DIR_PIN, &LEFT_LEG_SERIAL);
-uint8_t left_leg_ids[LEFT_LEG_NUM_IDS] = {LEFT_LEG_HIP_ROLL_ID,
-                                          LEFT_LEG_HIP_PITCH_ID,
-                                          LEFT_LEG_KNEE_ID, LEFT_LEG_ANKLE_ID};
+uint8_t left_leg_ids[LEFT_LEG_NUM_IDS] = {
+    LEFT_LEG_ANKLE_ID,
+    LEFT_LEG_KNEE_ID,
+    LEFT_LEG_HIP_PITCH_ID,
+    LEFT_LEG_HIP_ROLL_ID,
+    LEFT_LEG_HIP_YAW_ID,
+};
+
 #endif
 #ifdef RIGHT_LEG_ON
 XL320Chain right_leg_bus(RIGHT_LEG_DIR_PIN, &RIGHT_LEG_SERIAL);
 uint8_t right_leg_ids[RIGHT_LEG_NUM_IDS] = {
-    RIGHT_LEG_HIP_ROLL_ID, RIGHT_LEG_HIP_PITCH_ID, RIGHT_LEG_KNEE_ID,
-    RIGHT_LEG_ANKLE_ID};
+    RIGHT_LEG_ANKLE_ID,
+    RIGHT_LEG_KNEE_ID,
+    RIGHT_LEG_HIP_PITCH_ID,
+    RIGHT_LEG_HIP_ROLL_ID,
+    RIGHT_LEG_HIP_YAW_ID,
+};
 #endif
 
 float map_float(float x, float in_min, float in_max, float out_min,
