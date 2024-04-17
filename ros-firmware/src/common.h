@@ -1,5 +1,6 @@
 #define COMPILE_FOR_SERIAL 0
 #define COMPILE_FOR_ROS 1
+#define COMPILE_FOR_SINE 2
 #define COMPILE_MODE 1
 #define LEFT_LEG_ON 1
 #define RIGHT_LEG_ON 1

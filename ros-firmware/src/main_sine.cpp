@@ -1,0 +1,302 @@
+#include "common.h"
+#if COMPILE_MODE == COMPILE_FOR_SINE
+#include <Arduino.h>
+#include "helpers.cpp"
+
+#include "HardwareSerial.h"
+#include "ServoChain.h"
+#include "control_table_xl320.h"
+
+#define CONTROL_LOOP_US 10000
+#define LIGHTS_MILLIS 500
+
+static unsigned long lastTime;
+// static unsigned long lastMillis;
+unsigned short rcv_buf[3 * (RIGHT_LEG_NUM_IDS + LEFT_LEG_NUM_IDS)];
+
+#if LEFT_LEG_ON == 1
+XL320Chain left_leg_bus(LEFT_LEG_DIR_PIN, &LEFT_LEG_SERIAL);
+uint8_t left_leg_ids[LEFT_LEG_NUM_IDS] = {
+    LEFT_LEG_ANKLE_ID,
+    LEFT_LEG_KNEE_ID,
+    LEFT_LEG_HIP_PITCH_ID,
+    LEFT_LEG_HIP_ROLL_ID,
+    LEFT_LEG_HIP_YAW_ID,
+};
+
+#endif
+#if RIGHT_LEG_ON == 1
+XL320Chain right_leg_bus(RIGHT_LEG_DIR_PIN, &RIGHT_LEG_SERIAL);
+uint8_t right_leg_ids[RIGHT_LEG_NUM_IDS] = {
+    RIGHT_LEG_ANKLE_ID,
+    RIGHT_LEG_KNEE_ID,
+    RIGHT_LEG_HIP_PITCH_ID,
+    RIGHT_LEG_HIP_ROLL_ID,
+    RIGHT_LEG_HIP_YAW_ID,
+};
+#endif
+
+#if LEFT_LEG_ON == 1
+uint16_t left_leg_setpoints[LEFT_LEG_NUM_IDS] = {
+    512, 512, 512, 512, 512};                 // hip roll, hip pitch, knee, ankle
+float left_leg_feedback[LEFT_LEG_NUM_IDS][3]; // in each ID, array with
+                                              // position, velocity and load
+                                              // uint8_t left_leg_colors[LEFT_LEG_NUM_IDS] = {3, 2, 3, 2};
+#endif
+
+#if RIGHT_LEG_ON == 1
+uint16_t right_leg_setpoints[RIGHT_LEG_NUM_IDS] = {
+    512, 512, 512, 512, 512};                   // hip roll, hip pitch, knee, ankle
+float right_leg_feedback[RIGHT_LEG_NUM_IDS][3]; // in each ID, array with
+                                                // position, velocity and load
+#endif
+
+float map_float(float x, float in_min, float in_max, float out_min,
+                float out_max)
+{
+  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}
+
+void rawToFloat(unsigned short *input, float *output)
+{
+  output[0] = map_float(input[0], 0, 1023, 0, 300.00);                                                                             // pos in degrees
+  output[1] = (input[1] >= 1024) ? map_float(input[1] & 0x3FF, 0, 1023, 0, 33.3) : map_float(input[1] & 0x3FF, 0, 1023, 0, -33.3); // velocity in RPM
+  output[2] = (input[2] >= 1024) ? map_float(input[2] & 0x3FF, 0, 1023, 0, 1.0) : map_float(input[2] & 0x3FF, 0, 1023, 0, -1.0);   // velocity in RPM
+}
+
+float raw2deg(float raw) { return map_float(raw, 0, 1023, 0, 300); }
+
+float deg2raw(float deg) { return map_float(deg, 0, 300, 0, 1023); }
+
+void process_serial_cmd()
+{
+  static String inputString = "";             // A String to hold incoming data
+  static boolean inputStringComplete = false; // Whether the string is complete
+
+  while (SerialUSB.available())
+  {
+    char inChar = (char)SerialUSB.read(); // Read each character
+    if (inChar == '\n')
+    {
+      inputStringComplete = true; // If newline, input is complete
+    }
+    else
+    {
+      inputString += inChar; // Add character to input
+    }
+  }
+
+  if (inputStringComplete)
+  {
+    SerialUSB.print("Received: ");
+    SerialUSB.println(inputString); // Echo the input for debugging
+
+    // Process the completed command
+    if (inputString.startsWith("i "))
+    {
+      // Increment command
+      float inc_deg = inputString.substring(2).toFloat(); // Extract number
+      float servo_setpoint_raw = (servo_setpoint_raw + deg2raw(inc_deg));
+      SerialUSB.print("Incremented position by: ");
+      SerialUSB.println(inc_deg);
+    }
+    else if (inputString.startsWith("s "))
+    {
+      // Set command
+      float servo_setpoint_deg = inputString.substring(2).toFloat(); // Extract and set new position
+      float servo_setpoint_raw = deg2raw(servo_setpoint_deg);
+
+#if LEFT_LEG_ON == 1
+      for (int i = 0; i < LEFT_LEG_NUM_IDS; i++)
+      {
+        left_leg_setpoints[i] = servo_setpoint_raw;
+      }
+#endif
+#if RIGHT_LEG_ON == 1
+      for (int i = 0; i < RIGHT_LEG_NUM_IDS; i++)
+      {
+        right_leg_setpoints[i] = servo_setpoint_raw;
+      }
+#endif
+
+      SerialUSB.print("Set position to: ");
+      SerialUSB.println(servo_setpoint_deg);
+    }
+    else
+    {
+      SerialUSB.println("Unknown command");
+    }
+
+    // Clear the string for the next command
+    inputString = "";
+    inputStringComplete = false;
+  }
+}
+
+// Get the feedback from the servos
+int updatePositions()
+{
+  memset(rcv_buf, 0, sizeof(rcv_buf));
+  int error = 0;
+#if LEFT_LEG_ON == 1
+  error =
+      left_leg_bus.getServoData(left_leg_ids, rcv_buf, LEFT_LEG_NUM_IDS);
+  if (error)
+    return error;
+  for (int i = 0; i < LEFT_LEG_NUM_IDS; i++)
+  {
+    rawToFloat(&rcv_buf[3 * i], left_leg_feedback[i]);
+  }
+#endif
+#if RIGHT_LEG_ON == 1
+  error =
+      right_leg_bus.getServoData(right_leg_ids, rcv_buf, RIGHT_LEG_NUM_IDS);
+  if (error)
+    return error;
+  for (int i = 0; i < RIGHT_LEG_NUM_IDS; i++)
+  {
+    rawToFloat(&rcv_buf[3 * i], right_leg_feedback[i]);
+  }
+#endif
+  return 0;
+}
+
+// Apply the setpoints to the servos
+void sendSetpoints()
+{
+  SerialUSB.println("sendSetpoints");
+#if LEFT_LEG_ON == 1
+  left_leg_bus.setServoPositions(left_leg_ids, left_leg_setpoints,
+                                 LEFT_LEG_NUM_IDS);
+#endif
+#if RIGHT_LEG_ON == 1
+  right_leg_bus.setServoPositions(right_leg_ids, right_leg_setpoints,
+                                  RIGHT_LEG_NUM_IDS);
+#endif
+}
+
+// void toggleLights()
+// {
+//   // left leg lights
+// #if LEFT_LEG_ON == 1
+//   for (int i = 0; i < LEFT_LEG_NUM_IDS; i++)
+//   {
+//     if (left_leg_colors[i] == 2)
+//     {
+//       left_leg_colors[i] = 3;
+//     }
+//     else
+//     {
+//       left_leg_colors[i] = 2;
+//     }
+//   }
+//   left_leg_bus.setLEDs(left_leg_ids, left_leg_colors, LEFT_LEG_NUM_IDS);
+// #endif
+//   // right leg lights
+// #if RIGHT_LEG_ON == 1
+//   for (int i = 0; i < RIGHT_LEG_NUM_IDS; i++)
+//   {
+//     if (right_leg_colors[i] == 2)
+//     {
+//       right_leg_colors[i] = 3;
+//     }
+//     else
+//     {
+//       right_leg_colors[i] = 2;
+//     }
+//   }
+//   right_leg_bus.setLEDs(right_leg_ids, right_leg_colors, RIGHT_LEG_NUM_IDS);
+// #endif
+// }
+
+void setup()
+{
+  SerialUSB.begin(115200);
+  while (!SerialUSB)
+    ;
+  SerialUSB.println("SerialUSB initialized");
+#if LEFT_LEG_ON == 1
+  left_leg_bus.begin();
+  left_leg_bus.torqueON(left_leg_ids, LEFT_LEG_NUM_IDS);
+#endif
+#if RIGHT_LEG_ON == 1
+  right_leg_bus.begin();
+  right_leg_bus.torqueON(right_leg_ids, RIGHT_LEG_NUM_IDS);
+#endif
+  lastTime = micros();
+  // lastMillis = millis();
+}
+
+float servoSine(float offset, float amplitude, float frequency, float phase, float time_offset)
+{
+  float time = millis() / 1000.0 + time_offset;
+  return offset + amplitude * sin(frequency * time + phase);
+}
+
+void sine_loop()
+{
+  // Phase difference between left and right legs
+  float phase_diff = M_PI; // 180 degrees phase difference for opposite movements
+  float base_offset = 150; // Base position in degrees
+  float amplitude = 15;    // Smaller, consistent amplitude
+  float frequency = 2;     // Frequency of the sine wave
+
+  // Update left leg setpoints
+  left_leg_setpoints[0] = deg2raw(servoSine(base_offset, amplitude * 1.5, frequency, 0, 0));
+  left_leg_setpoints[1] = deg2raw(servoSine(base_offset, amplitude * 1.5, frequency, 0, -5));
+  left_leg_setpoints[2] = deg2raw(servoSine(base_offset, amplitude * 1.5, frequency, 0, -7.5));
+  left_leg_setpoints[3] = deg2raw(servoSine(base_offset, amplitude, frequency, 0, -2.5));
+  left_leg_setpoints[4] = deg2raw(servoSine(base_offset, amplitude, frequency, 0, -2.5));
+
+  // Update right leg setpoints with phase difference
+  right_leg_setpoints[0] = deg2raw(servoSine(base_offset, amplitude * 1.5, frequency, phase_diff, 0));
+  right_leg_setpoints[1] = deg2raw(servoSine(base_offset, amplitude * 1.5, frequency, phase_diff, -5));
+  right_leg_setpoints[2] = deg2raw(servoSine(base_offset, amplitude * 1.5, frequency, phase_diff, -7.5));
+  right_leg_setpoints[3] = deg2raw(servoSine(base_offset, amplitude, frequency, phase_diff, -2.5));
+  right_leg_setpoints[4] = deg2raw(servoSine(base_offset, amplitude, frequency, phase_diff, -2.5));
+}
+
+void loop()
+{
+  // process_serial_cmd();
+  sine_loop();
+  if (micros() - lastTime > CONTROL_LOOP_US)
+  {
+    sendSetpoints();
+
+    int error = updatePositions();
+
+    // Print rcv_buf to SerialUSB
+    for (uint32_t i = 0; i < sizeof(rcv_buf) / sizeof(rcv_buf[0]); i++)
+    {
+      SerialUSB.printf("rcv_buf[%d]: %d\n", i, rcv_buf[i]);
+    }
+#if LEFT_LEG_ON == 1
+    for (uint32_t i = 0; i < LEFT_LEG_NUM_IDS; i++)
+    {
+      SerialUSB.printf("Left Leg ID: %d, Pos: %f, Vel: %f, Load: %f, setpoint: %d\r\n",
+                       left_leg_ids[i], left_leg_feedback[i][0],
+                       left_leg_feedback[i][1], left_leg_feedback[i][2], left_leg_setpoints[i]);
+    }
+#endif
+    // Print rcv_buf to SerialUSB
+    for (uint32_t i = 0; i < sizeof(rcv_buf) / sizeof(rcv_buf[0]); i++)
+    {
+      SerialUSB.printf("rcv_buf[%d]: %d\n", i, rcv_buf[i]);
+    }
+#if RIGHT_LEG_ON == 1
+    for (uint32_t i = 0; i < RIGHT_LEG_NUM_IDS; i++)
+    {
+      SerialUSB.printf("Right Leg ID: %d, Pos: %f, Vel: %f, Load: %f, setpoint: %d\r\n",
+                       right_leg_ids[i], right_leg_feedback[i][0],
+                       right_leg_feedback[i][1], right_leg_feedback[i][2], right_leg_setpoints[i]);
+    }
+#endif
+    if (error)
+    {
+      // add error handling
+    }
+    lastTime = micros();
+  }
+}
+#endif // COMPILE_MODE == COMPILE_FOR_SERIAL

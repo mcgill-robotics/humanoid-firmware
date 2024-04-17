@@ -9,7 +9,8 @@
     "string": "cpp",
     "vector": "cpp",
     "string_view": "cpp",
-    "initializer_list": "cpp"
+    "initializer_list": "cpp",
+    "cmath": "cpp"
   },
   "stm32-for-vscode.openOCDPath": false,
   "stm32-for-vscode.makePath": false
