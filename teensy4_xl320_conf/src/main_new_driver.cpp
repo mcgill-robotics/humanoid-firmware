@@ -12,20 +12,58 @@ const int DXL_DIR_PIN = -1; // DYNAMIXEL Shield DIR PIN
 #define MODEL_NUMBER_ADDR 0
 #define MODEL_NUMBER_LENGTH 2
 
+int app_choice = 0;
+
 const uint8_t BROADCAST_ID = 0xFE;
 const float DXL_PROTOCOL_VERSION = 2.0;
 // uint32_t baud_rates[] = {9600, 57600, 115200, 1000000, 2000000, 3000000};
 uint32_t baud_rates[] = {57600};
 size_t num_baud_rates = sizeof(baud_rates) / sizeof(baud_rates[0]);
 uint8_t target_id = BROADCAST_ID;
-uint8_t new_id = 101;
+Dynamixel2Arduino dxl(DXL_SERIAL, DXL_DIR_PIN);
 
+// ------------------- sync_read_app -------------------
+const uint8_t DXL_ID_CNT = 2;
+const uint8_t DXL_ID_LIST[DXL_ID_CNT] = {1, 2};
+const uint16_t user_pkt_buf_cap = 128;
+uint8_t user_pkt_buf[user_pkt_buf_cap];
+
+// Starting address of the Data to read; Present Position = 132
+const uint16_t SR_START_ADDR = 132;
+// Length of the Data to read; Length of Position data of X series is 4 byte
+const uint16_t SR_ADDR_LEN = 4;
+// Starting address of the Data to write; Goal Position = 116
+const uint16_t SW_START_ADDR = 116;
+// Length of the Data to write; Length of Position data of X series is 4 byte
+const uint16_t SW_ADDR_LEN = 4;
+typedef struct sr_data
+{
+  int32_t present_position;
+} __attribute__((packed)) sr_data_t;
+typedef struct sw_data
+{
+  int32_t goal_position;
+} __attribute__((packed)) sw_data_t;
+
+sr_data_t sr_data[DXL_ID_CNT];
+DYNAMIXEL::InfoSyncReadInst_t sr_infos;
+DYNAMIXEL::XELInfoSyncRead_t info_xels_sr[DXL_ID_CNT];
+
+sw_data_t sw_data[DXL_ID_CNT];
+DYNAMIXEL::InfoSyncWriteInst_t sw_infos;
+DYNAMIXEL::XELInfoSyncWrite_t info_xels_sw[DXL_ID_CNT];
+
+int32_t goal_position[2] = {1024, 2048};
+uint8_t goal_position_index = 0;
+// ------------------- END sync_read_app -------------------
+
+// ------------------- set_id_app -------------------
+uint8_t new_id = 101;
 float servo_setpoint_raw = 0;
 float servo_setpoint_deg = 0;
 float servo_pos_raw = 0;
 float servo_pos_deg = 0;
-
-Dynamixel2Arduino dxl(DXL_SERIAL, DXL_DIR_PIN);
+// ------------------- END set_id_app -------------------
 
 // This namespace is required to use Control table item names
 using namespace ControlTableItem;
@@ -129,15 +167,8 @@ void mass_scan()
   }
 }
 
-void setup()
+void set_id_app_setup()
 {
-  // put your setup code here, to run once:
-
-  // Use UART port of DYNAMIXEL Shield to debug.
-  DEBUG_SERIAL.begin(115200);
-  while (!DEBUG_SERIAL)
-    ;
-
   // Prompt the user for the new ID
   DEBUG_SERIAL.println("Enter new ID for the DYNAMIXEL:");
   new_id = readSerialInput();
@@ -211,12 +242,12 @@ void setup()
   dxl.torqueOn(new_id);
 }
 
-void loop()
+void set_id_app_loop()
 {
   float current_pos_raw = dxl.getPresentPosition(new_id, UNIT_RAW);
   float current_pos_deg = dxl.getPresentPosition(new_id, UNIT_DEGREE);
-  DEBUG_SERIAL.printf("current_pos_raw=%f, current_pos_deg=%f\n",
-                      current_pos_raw, current_pos_deg);
+  DEBUG_SERIAL.printf("new_id=%d, current_pos_raw=%f, current_pos_deg=%f\n",
+                      new_id, current_pos_raw, current_pos_deg);
 
   // Turn on the LED on DYNAMIXEL
   DEBUG_SERIAL.println("LED ON at 210 deg...");
@@ -225,8 +256,159 @@ void loop()
   delay(500);
 
   // Turn off the LED on DYNAMIXEL
-  DEBUG_SERIAL.println("LED OFF at 180...");
+  DEBUG_SERIAL.println("LED OFF at 180 deg...");
   dxl.setGoalPosition(new_id, 180.0, UNIT_DEGREE);
   dxl.ledOff(new_id);
   delay(500);
+}
+
+void sync_read_app_setup()
+{
+  uint8_t i;
+  pinMode(LED_BUILTIN, OUTPUT);
+
+  dxl.begin(57600);
+  dxl.setPortProtocolVersion(DXL_PROTOCOL_VERSION);
+
+  // Prepare the SyncRead structure
+  for (i = 0; i < DXL_ID_CNT; i++)
+  {
+    dxl.torqueOff(DXL_ID_LIST[i]);
+    dxl.setOperatingMode(DXL_ID_LIST[i], OP_POSITION);
+  }
+  dxl.torqueOn(BROADCAST_ID);
+
+  // Fill the members of structure to syncRead using external user packet buffer
+  sr_infos.packet.p_buf = user_pkt_buf;
+  sr_infos.packet.buf_capacity = user_pkt_buf_cap;
+  sr_infos.packet.is_completed = false;
+  sr_infos.addr = SR_START_ADDR;
+  sr_infos.addr_length = SR_ADDR_LEN;
+  sr_infos.p_xels = info_xels_sr;
+  sr_infos.xel_count = 0;
+
+  for (i = 0; i < DXL_ID_CNT; i++)
+  {
+    info_xels_sr[i].id = DXL_ID_LIST[i];
+    info_xels_sr[i].p_recv_buf = (uint8_t *)&sr_data[i];
+    sr_infos.xel_count++;
+  }
+  sr_infos.is_info_changed = true;
+
+  // Fill the members of structure to syncWrite using internal packet buffer
+  sw_infos.packet.p_buf = nullptr;
+  sw_infos.packet.is_completed = false;
+  sw_infos.addr = SW_START_ADDR;
+  sw_infos.addr_length = SW_ADDR_LEN;
+  sw_infos.p_xels = info_xels_sw;
+  sw_infos.xel_count = 0;
+
+  for (i = 0; i < DXL_ID_CNT; i++)
+  {
+    info_xels_sw[i].id = DXL_ID_LIST[i];
+    info_xels_sw[i].p_data = (uint8_t *)&sw_data[i].goal_position;
+    sw_infos.xel_count++;
+  }
+  sw_infos.is_info_changed = true;
+}
+
+void sync_read_app_loop()
+{
+  static uint32_t try_count = 0;
+  uint8_t i, recv_cnt;
+
+  // Insert a new Goal Position to the SyncWrite Packet
+  for (i = 0; i < DXL_ID_CNT; i++)
+  {
+    sw_data[i].goal_position = goal_position[goal_position_index];
+  }
+
+  // Update the SyncWrite packet status
+  sw_infos.is_info_changed = true;
+
+  DEBUG_SERIAL.print("\n>>>>>> Sync Instruction Test : ");
+  DEBUG_SERIAL.println(try_count++);
+
+  // Build a SyncWrite Packet and transmit to DYNAMIXEL
+  if (dxl.syncWrite(&sw_infos) == true)
+  {
+    DEBUG_SERIAL.println("[SyncWrite] Success");
+    for (i = 0; i < sw_infos.xel_count; i++)
+    {
+      DEBUG_SERIAL.print("  ID: ");
+      DEBUG_SERIAL.println(sw_infos.p_xels[i].id);
+      DEBUG_SERIAL.print("\t Goal Position: ");
+      DEBUG_SERIAL.println(sw_data[i].goal_position);
+    }
+    if (goal_position_index == 0)
+      goal_position_index = 1;
+    else
+      goal_position_index = 0;
+  }
+  else
+  {
+    DEBUG_SERIAL.print("[SyncWrite] Fail, Lib error code: ");
+    DEBUG_SERIAL.print(dxl.getLastLibErrCode());
+  }
+  DEBUG_SERIAL.println();
+
+  delay(250);
+
+  // Transmit predefined SyncRead instruction packet
+  // and receive a status packet from each DYNAMIXEL
+  recv_cnt = dxl.syncRead(&sr_infos);
+  if (recv_cnt > 0)
+  {
+    DEBUG_SERIAL.print("[SyncRead] Success, Received ID Count: ");
+    DEBUG_SERIAL.println(recv_cnt);
+    for (i = 0; i < recv_cnt; i++)
+    {
+      DEBUG_SERIAL.print("  ID: ");
+      DEBUG_SERIAL.print(sr_infos.p_xels[i].id);
+      DEBUG_SERIAL.print(", Error: ");
+      DEBUG_SERIAL.println(sr_infos.p_xels[i].error);
+      DEBUG_SERIAL.print("\t Present Position: ");
+      DEBUG_SERIAL.println(sr_data[i].present_position);
+    }
+  }
+  else
+  {
+    DEBUG_SERIAL.print("[SyncRead] Fail, Lib error code: ");
+    DEBUG_SERIAL.println(dxl.getLastLibErrCode());
+  }
+  DEBUG_SERIAL.println("=======================================================");
+
+  digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
+  delay(750);
+}
+
+void setup()
+{
+  DEBUG_SERIAL.begin(115200);
+  while (!DEBUG_SERIAL)
+    ;
+  DEBUG_SERIAL.println("App choice: 1 for set_id_app, 2 for sync_read_app");
+  app_choice = readSerialInput();
+  switch (app_choice)
+  {
+  case 1:
+    set_id_app_setup();
+    break;
+  case 2:
+    sync_read_app_setup();
+    break;
+  }
+}
+
+void loop()
+{
+  switch (app_choice)
+  {
+  case 1:
+    set_id_app_loop();
+    break;
+  case 2:
+    sync_read_app_loop();
+    break;
+  }
 }
