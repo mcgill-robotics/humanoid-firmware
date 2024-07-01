@@ -26,10 +26,12 @@ int newBaudRate = 3;
 void waitForEnter()
 {
     SerialUSB.println("POWER CYCLE and PRESS ENTER to continue...");
+    // Clear the serial buffer
     while (SerialUSB.available() > 0)
     {
-        SerialUSB.read(); // Clear the serial buffer
+        SerialUSB.read();
     }
+    // Wait for the user to press enter
     while (true)
     {
         if (SerialUSB.available() > 0)

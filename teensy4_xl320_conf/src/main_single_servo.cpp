@@ -123,8 +123,27 @@ void servo_loop()
   Serial1.clear();
 
   // Get state
-  servo_pos_raw = robot.getJointPosition(servo_id);
-  // servo_pos_raw = robot.getJointPosition(servo_id, &SerialUSB);
+  // servo_pos_raw = robot.getJointPosition(servo_id);
+  servo_pos_raw = robot.getJointPosition(servo_id, &SerialUSB);
+
+  // Get all IDs
+  byte idBuf[16];
+  int numIDs = robot.broadcastPing(&SerialUSB, idBuf);
+  if (numIDs)
+  {
+    SerialUSB.print(numIDs);
+    SerialUSB.print(" IDs found: ");
+    for (int i = 0; i < numIDs; i++)
+    {
+      SerialUSB.print(idBuf[i]);
+      SerialUSB.print(",");
+    }
+    SerialUSB.println();
+  }
+  else
+  {
+    SerialUSB.println("No IDs found.");
+  }
 
   servo_pos_deg = raw2deg(servo_pos_raw);
 
