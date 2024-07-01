@@ -83,18 +83,18 @@
 #define XL_ID 7
 #define XL_BAUD_RATE 8
 #define XL_RETURN_DELAY_TIME 9
-#define XL_CW_ANGLE_LIMIT_L 48	// Adjusted to a relevant register
-#define XL_CW_ANGLE_LIMIT_H 49	// Adjusted to a relevant register
+#define XL_CW_ANGLE_LIMIT_L 48  // Adjusted to a relevant register
+#define XL_CW_ANGLE_LIMIT_H 49  // Adjusted to a relevant register
 #define XL_CCW_ANGLE_LIMIT_L 50 // Adjusted to a relevant register
 #define XL_CCW_ANGLE_LIMIT_H 51 // Adjusted to a relevant register
 #define XL_CONTROL_MODE 11
 #define XL_LIMIT_TEMPERATURE 31
 #define XL_DOWN_LIMIT_VOLTAGE 34 // Min Voltage Limit in the new table
-#define XL_UP_LIMIT_VOLTAGE 32	 // Max Voltage Limit in the new table
-#define XL_MAX_TORQUE_L 36		 // Adjusted to a relevant register
-#define XL_MAX_TORQUE_H 37		 // Adjusted to a relevant register
-#define XL_RETURN_LEVEL 68		 // Status Return Level in the RAM Area
-#define XL_ALARM_SHUTDOWN 63	 // Shutdown in the new table
+#define XL_UP_LIMIT_VOLTAGE 32   // Max Voltage Limit in the new table
+#define XL_MAX_TORQUE_L 36       // Adjusted to a relevant register
+#define XL_MAX_TORQUE_H 37       // Adjusted to a relevant register
+#define XL_RETURN_LEVEL 68       // Status Return Level in the RAM Area
+#define XL_ALARM_SHUTDOWN 63     // Shutdown in the new table
 
 /* RAM Area */
 #define XL_GOAL_TORQUE -1
@@ -158,77 +158,77 @@
 class XL320
 {
 private:
-	unsigned char Direction_Pin;
-	volatile char gbpParamEx[130 + 10];
-	Stream *stream;
+  unsigned char Direction_Pin;
+  volatile char gbpParamEx[130 + 10];
+  Stream *stream;
 
-	void nDelay(uint32_t nTime);
+  void nDelay(uint32_t nTime);
 
 public:
-	XL320();
-	virtual ~XL320();
+  XL320();
+  virtual ~XL320();
 
-	void begin(Stream &stream);
+  void begin(Stream &stream);
 
-	void moveJoint(int id, int value);
-	void setJointSpeed(int id, int value);
-	void LED(int id, char led_color[]);
-	void setJointTorque(int id, int value);
+  void moveJoint(int id, int value);
+  void setJointSpeed(int id, int value);
+  void LED(int id, char led_color[]);
+  void setJointTorque(int id, int value);
 
-	void TorqueON(int id);
-	void TorqueOFF(int id);
-	int broadcastPing(Stream *debugStream, byte *IDbuf);
+  void TorqueON(int id);
+  void TorqueOFF(int id);
+  int broadcastPing(Stream *debugStream, byte *IDbuf);
 
-	void quickTest();
-	void setID(int oldID, int newID);
+  void quickTest();
+  void setID(int oldID, int newID);
 
-	int getSpoonLoad();
-	int getJointPosition(int id);
-	int getJointPosition(int id, Stream *debugStream);
-	int getJointSpeed(int id);
-	int getJointLoad(int id);
-	int getJointTemperature(int id);
-	int isJointMoving(int id);
+  int getSpoonLoad();
+  int getJointPosition(int id);
+  int getJointPosition(int id, Stream *debugStream);
+  int getJointSpeed(int id);
+  int getJointLoad(int id);
+  int getJointTemperature(int id);
+  int isJointMoving(int id);
 
-	int sendPacket(int id, int Address, int value);
-	int readPacket(unsigned char *buffer, size_t size);
+  int sendPacket(int id, int Address, int value);
+  int readPacket(unsigned char *buffer, size_t size);
 
-	int RXsendPacket(int id, int Address);
-	int RXsendPacket(int id, int Address, int size);
+  int RXsendPacket(int id, int Address);
+  int RXsendPacket(int id, int Address, int size);
 
-	int flush();
+  int flush();
 
-	class Packet
-	{
-		bool freeData;
+  class Packet
+  {
+    bool freeData;
 
-	public:
-		unsigned char *data;
-		size_t data_size;
+  public:
+    unsigned char *data;
+    size_t data_size;
 
-		// wrap a received data stream in an Packet object for analysis
-		Packet(unsigned char *data, size_t size);
-		// build a packet into the pre-allocated data array
-		// if data is null it will be malloc'ed and free'd on destruction.
+    // wrap a received data stream in an Packet object for analysis
+    Packet(unsigned char *data, size_t size);
+    // build a packet into the pre-allocated data array
+    // if data is null it will be malloc'ed and free'd on destruction.
 
-		Packet(
-			unsigned char *data,
-			size_t size,
-			unsigned char id,
-			unsigned char instruction,
-			int parameter_data_size,
-			...);
-		~Packet();
-		unsigned char getId();
-		int getLength();
-		int getSize();
-		int getParameterCount();
-		unsigned char getInstruction();
-		unsigned char getParameter(int n);
-		bool isValid();
+    Packet(
+        unsigned char *data,
+        size_t size,
+        unsigned char id,
+        unsigned char instruction,
+        int parameter_data_size,
+        ...);
+    ~Packet();
+    unsigned char getId();
+    int getLength();
+    int getSize();
+    int getParameterCount();
+    unsigned char getInstruction();
+    unsigned char getParameter(int n);
+    bool isValid();
 
-		void toStream(Stream &stream);
-	};
+    void toStream(Stream &stream);
+  };
 };
 
 #endif
