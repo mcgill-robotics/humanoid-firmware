@@ -19,12 +19,12 @@ const float DXL_PROTOCOL_VERSION = 2.0;
 // uint32_t baud_rates[] = {9600, 57600, 115200, 1000000, 2000000, 3000000};
 uint32_t baud_rates[] = {57600};
 size_t num_baud_rates = sizeof(baud_rates) / sizeof(baud_rates[0]);
-uint8_t target_id = BROADCAST_ID;
+// uint8_t target_id = BROADCAST_ID;
 Dynamixel2Arduino dxl(DXL_SERIAL, DXL_DIR_PIN);
 
 // ------------------- sync_read_app -------------------
-const uint8_t DXL_ID_CNT = 2;
-const uint8_t DXL_ID_LIST[DXL_ID_CNT] = {1, 2};
+const uint8_t DXL_ID_CNT = 1;
+const uint8_t DXL_ID_LIST[DXL_ID_CNT] = {2};
 const uint16_t user_pkt_buf_cap = 128;
 uint8_t user_pkt_buf[user_pkt_buf_cap];
 
@@ -58,12 +58,26 @@ uint8_t goal_position_index = 0;
 // ------------------- END sync_read_app -------------------
 
 // ------------------- set_id_app -------------------
-uint8_t new_id = 101;
+uint8_t new_id;
+
 float servo_setpoint_raw = 0;
 float servo_setpoint_deg = 0;
 float servo_pos_raw = 0;
 float servo_pos_deg = 0;
 // ------------------- END set_id_app -------------------
+
+// ------------------- mass_scan_app -------------------
+struct DeviceInfo
+{
+  int id;
+  int modelNumber;
+  uint32_t baudRate;
+};
+
+const int MAX_DEVICES = 32; // Maximum number of devices you expect to find
+DeviceInfo foundDevices[MAX_DEVICES];
+int foundDeviceCount = 0;
+// ------------------- END mass_scan_app -------------------
 
 // This namespace is required to use Control table item names
 using namespace ControlTableItem;
@@ -141,9 +155,8 @@ void process_serial_cmd()
   }
 }
 
-void mass_scan()
+void mass_scan_app_setup()
 {
-  uint32_t baud_rates[] = {9600, 57600, 115200, 1000000, 2000000, 3000000};
   for (size_t i = 0; i < num_baud_rates; i++)
   {
     uint32_t baud_rate = baud_rates[i];
@@ -155,13 +168,65 @@ void mass_scan()
 
     for (int id = 0; id < DXL_BROADCAST_ID; id++)
     {
-      // iterate until all ID in each buadrate is scanned.
+      // Iterate until all IDs in each baud rate are scanned.
       if (dxl.ping(id))
       {
+        int modelNumber = dxl.getModelNumber(id);
         DEBUG_SERIAL.print("ID : ");
         DEBUG_SERIAL.print(id);
         DEBUG_SERIAL.print(", Model Number: ");
-        DEBUG_SERIAL.println(dxl.getModelNumber(id));
+        DEBUG_SERIAL.print(modelNumber);
+        DEBUG_SERIAL.print(", Baud Rate: ");
+        DEBUG_SERIAL.println(baud_rate);
+
+        // Save the found device info
+        if (foundDeviceCount < MAX_DEVICES)
+        {
+          foundDevices[foundDeviceCount].id = id;
+          foundDevices[foundDeviceCount].modelNumber = modelNumber;
+          foundDevices[foundDeviceCount].baudRate = baud_rate;
+          foundDeviceCount++;
+        }
+        else
+        {
+          DEBUG_SERIAL.println("Max device limit reached!");
+        }
+      }
+    }
+  }
+
+  DEBUG_SERIAL.print("Found ");
+  DEBUG_SERIAL.print(foundDeviceCount);
+  DEBUG_SERIAL.println(" devices.");
+}
+
+void mass_scan_app_loop()
+{
+  DEBUG_SERIAL.println("Found devices:");
+  for (int i = 0; i < foundDeviceCount; i++)
+  {
+    DEBUG_SERIAL.print("ID: ");
+    DEBUG_SERIAL.print(foundDevices[i].id);
+    DEBUG_SERIAL.print(", Model Number: ");
+    DEBUG_SERIAL.print(foundDevices[i].modelNumber);
+    DEBUG_SERIAL.print(", Baud Rate: ");
+    DEBUG_SERIAL.println(foundDevices[i].baudRate);
+  }
+}
+
+void factory_reset_app_setup()
+{
+  for (size_t i = 0; i < num_baud_rates; i++)
+  {
+    uint32_t baud_rate = baud_rates[i];
+    dxl.begin(baud_rate);
+    dxl.setPortProtocolVersion(DXL_PROTOCOL_VERSION);
+    // Factory reset whole bus
+    for (uint8_t target_id = 0; target_id < DXL_BROADCAST_ID; target_id++)
+    {
+      if (dxl.ping(target_id) == true)
+      {
+        int ret = dxl.factoryReset(target_id, 0xFF, TIMEOUT);
       }
     }
   }
@@ -169,6 +234,8 @@ void mass_scan()
 
 void set_id_app_setup()
 {
+  int target_id = 0;
+
   // Prompt the user for the new ID
   DEBUG_SERIAL.println("Enter new ID for the DYNAMIXEL:");
   new_id = readSerialInput();
@@ -240,6 +307,69 @@ void set_id_app_setup()
                       ret, baud_rate, model_num_from_read, target_id, model_num_from_table, dxl.model_number_idx_[target_id]);
 
   dxl.torqueOn(new_id);
+}
+
+void set_id_2x_app_setup()
+{
+  const uint8_t target_id[2] = {1, 2};
+  const uint8_t target_id_cnt = sizeof(target_id) / sizeof(target_id[0]);
+  uint8_t new_id[2];
+
+  // Prompt the user for the ID of SERVO A
+  DEBUG_SERIAL.println("Enter new ID for SERVO A:");
+  new_id[0] = readSerialInput();
+  DEBUG_SERIAL.printf("New ID entered: %d\n", new_id[0]);
+
+  // Prompt the user for the ID of SERVO B
+  DEBUG_SERIAL.println("Enter new ID for SERVO B:");
+  new_id[1] = readSerialInput();
+  DEBUG_SERIAL.printf("New ID entered: %d\n", new_id[1]);
+
+  for (size_t i = 0; i < num_baud_rates; i++)
+  {
+    uint32_t baud_rate = baud_rates[i];
+    dxl.begin(baud_rate);
+    dxl.setPortProtocolVersion(DXL_PROTOCOL_VERSION);
+
+    DEBUG_SERIAL.print("Trying baud rate: ");
+    DEBUG_SERIAL.println(baud_rate);
+
+    for (int i = 0; i < target_id_cnt; i++)
+    {
+      if (dxl.ping(target_id[i]) == true)
+      {
+        DEBUG_SERIAL.printf("PING SUCCESS target_id=%d, baud_rate=%d, model_num=%d\n",
+                            target_id[i], baud_rate, dxl.getModelNumber(target_id[i]));
+
+        // Turn off torque when configuring items in EEPROM area
+        dxl.torqueOff(target_id[i]);
+
+        // Set a new ID for DYNAMIXEL. Do not use ID 200
+        if (dxl.setID(target_id[i], new_id[i]) == true)
+        {
+          DEBUG_SERIAL.printf("setID SUCCESS, target_id=%d, new_id=%d\n", target_id[i], new_id[i]);
+          if (dxl.ping(new_id[i]))
+          {
+            DEBUG_SERIAL.printf("Can PING new_id, target_id=%d, new_id=%d\n", target_id[i], new_id[i]);
+            DEBUG_SERIAL.println(new_id[i]);
+            DEBUG_SERIAL.print(", Model Number: ");
+            DEBUG_SERIAL.println(dxl.getModelNumber(new_id[i]));
+          }
+        }
+        else
+        {
+          DEBUG_SERIAL.print("Failed to change ID to ");
+          DEBUG_SERIAL.println(new_id[i]);
+        }
+        // Exit the loop if ping succeeds
+        break;
+      }
+      else
+      {
+        DEBUG_SERIAL.printf("PING FAILED, target_id=%d\n", target_id[i]);
+      }
+    }
+  }
 }
 
 void set_id_app_loop()
@@ -387,16 +517,30 @@ void setup()
   DEBUG_SERIAL.begin(115200);
   while (!DEBUG_SERIAL)
     ;
-  DEBUG_SERIAL.println("App choice: 1 for set_id_app, 2 for sync_read_app");
+
+  DEBUG_SERIAL.printf("App choice\n");
+  DEBUG_SERIAL.printf("\t0: mass_scan_app\n");
+  DEBUG_SERIAL.printf("\t1: set_id_app\n");
+  DEBUG_SERIAL.printf("\t2: sync_read_app\n");
+  DEBUG_SERIAL.printf("\t3: factory_reset_app\n");
+  DEBUG_SERIAL.printf("\t4: set_id_2x_app\n");
+
   app_choice = readSerialInput();
   switch (app_choice)
   {
+  case 0:
+    mass_scan_app_setup();
+    break;
   case 1:
     set_id_app_setup();
     break;
   case 2:
     sync_read_app_setup();
     break;
+  case 3:
+    factory_reset_app_setup();
+  case 4:
+    set_id_2x_app_setup();
   }
 }
 
@@ -404,11 +548,21 @@ void loop()
 {
   switch (app_choice)
   {
+  case 0:
+    mass_scan_app_loop();
+    break;
   case 1:
     set_id_app_loop();
     break;
   case 2:
     sync_read_app_loop();
+    break;
+  case 3:
+    delay(1000);
+    DEBUG_SERIAL.println("factory_reset_app");
+  case 4:
+    delay(1000);
+    DEBUG_SERIAL.println("set_id_2x_app");
     break;
   }
 }
