@@ -158,7 +158,7 @@ int XL320::broadcastPing(Stream *debugStream, byte *IDbuf)
   byte rxbuffer[255];
   int numValidIDs = 0;
 
-  Packet p(txbuffer, bufsize, 0xFE, 0x01, 0);
+  Packet p(txbuffer, bufsize, 0xFE, DYNAMIXAL_INSTR_PING, 0);
 
   int size = p.getSize();
   stream->write(txbuffer, size);
