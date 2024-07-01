@@ -17,6 +17,7 @@
 
 XL320 robot;
 int servoID = 254;
+char rgb[] = "rgbypcwo";
 
 // Desired servo ID and baud rate
 int newServoID = 13;
@@ -24,7 +25,7 @@ int newBaudRate = 3;
 
 void waitForEnter()
 {
-    SerialUSB.println("Power cycle and Press Enter to continue...");
+    SerialUSB.println("POWER CYCLE and PRESS ENTER to continue...");
     while (SerialUSB.available() > 0)
     {
         SerialUSB.read(); // Clear the serial buffer
@@ -62,7 +63,7 @@ start_setup:
     // Initialise your robot
     robot.begin(Serial1); // Hand in the serial object you're using
 
-    SerialUSB.printf("SETTING ID HALF\r\n");
+    SerialUSB.printf("SETTING ID\r\n");
     // ONE AT A TIME
     // ================
     // Set the servo ID
@@ -71,13 +72,13 @@ start_setup:
     // ID can be between 1 and 253 (but not 200)
     robot.sendPacket(servoID, XL_ID, 10);
     delay(200);
-    SerialUSB.printf("  Set the servo ID to %d (9600)\r\n", newServoID);
+    SerialUSB.printf("\tSet the servo ID to %d (9600)\r\n", newServoID);
     robot.sendPacket(servoID, XL_ID, newServoID);
     delay(200);
-    SerialUSB.println(" Change the Serial1 baud rate to 1Mbps");
+    SerialUSB.println("\tChange the Serial1 baud rate to 1Mbps");
     Serial1.begin(SERVO_BAUD_HIGH, SERIAL_8N1_HALF_DUPLEX); // Start with the new baud rate
     delay(200);
-    SerialUSB.printf("  Set the servo ID to %d (1Mbps)\r\n", newServoID);
+    SerialUSB.printf("\tSet the servo ID to %d (1Mbps)\r\n", newServoID);
     robot.sendPacket(servoID, XL_ID, newServoID);
 
     // Prompt for enter key
@@ -93,14 +94,16 @@ start_setup:
     // 0: 9600, 1:57600, 2:115200, 3:1Mbps
     Serial1.begin(SERVO_BAUD_LOW, SERIAL_8N1_HALF_DUPLEX);
     delay(200);
-    SerialUSB.println(" Set the baud rate to 3 (9600)");
+    SerialUSB.println("\tSet the baud rate to 3 (9600)");
     robot.sendPacket(servoID, XL_BAUD_RATE, 3);
     delay(200);
-    SerialUSB.println(" Change the Serial1 baud rate to 1Mbps");
+    SerialUSB.println("\tChange the Serial1 baud rate to 1Mbps");
     Serial1.begin(SERVO_BAUD_HIGH, SERIAL_8N1_HALF_DUPLEX); // Start with the new baud rate
     delay(200);
-    SerialUSB.println(" Set the baud rate to 3 again (1Mbps)");
+    SerialUSB.println("\tSet the baud rate to 3 again (1Mbps)");
     robot.sendPacket(servoID, XL_BAUD_RATE, 3);
+
+    robot.LED(newServoID, &rgb[random(0, 7)]);
 
     // Prompt for enter key
     waitForEnter();
