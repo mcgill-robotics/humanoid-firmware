@@ -1,6 +1,7 @@
 #include "common.h"
 #if COMPILE_CFG == COMPILE_CFG_SINGLE_SERVO
 #include <Arduino.h>
+#include "cmd_utils.hpp"
 
 #include "XL320.h"
 #include "HardwareSerial.h"
@@ -18,21 +19,6 @@ float servo_setpoint_raw = 0;
 float servo_setpoint_deg = 0;
 float servo_pos_raw = 0;
 float servo_pos_deg = 0;
-
-float map_float(float x, float in_min, float in_max, float out_min, float out_max)
-{
-  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
-}
-
-float raw2deg(float raw)
-{
-  return map_float(raw, 0, 1023, 0, 300);
-}
-
-float deg2raw(float deg)
-{
-  return map_float(deg, 0, 300, 0, 1023);
-}
 
 void process_serial_cmd()
 {
