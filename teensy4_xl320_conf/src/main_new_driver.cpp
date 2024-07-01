@@ -54,9 +54,16 @@ const int DXL_DIR_PIN = -1;
 const int DXL_DIR_PIN = -1; // DYNAMIXEL Shield DIR PIN
 #endif
 
+#define TIMEOUT 10 // default communication timeout 10ms
+#define MODEL_NUMBER_ADDR 0
+#define MODEL_NUMBER_LENGTH 2
+
 // const uint8_t DEFAULT_DXL_ID = 1;
 const uint8_t DEFAULT_DXL_ID = 0xFE;
 const float DXL_PROTOCOL_VERSION = 2.0;
+uint32_t baud_rates[] = {9600, 57600, 115200, 1000000, 2000000, 3000000};
+size_t num_baud_rates = sizeof(baud_rates) / sizeof(baud_rates[0]);
+uint8_t present_id = DEFAULT_DXL_ID;
 
 Dynamixel2Arduino dxl(DXL_SERIAL, DXL_DIR_PIN);
 
@@ -66,7 +73,6 @@ using namespace ControlTableItem;
 void setup()
 {
     // put your setup code here, to run once:
-    uint8_t present_id = DEFAULT_DXL_ID;
     uint8_t new_id = 0;
 
     // Use UART port of DYNAMIXEL Shield to debug.
@@ -74,59 +80,92 @@ void setup()
     while (!DEBUG_SERIAL)
         ;
 
-    // Set Port baudrate to 57600bps. This has to match with DYNAMIXEL baudrate.
-    dxl.begin(9600);
-    // Set Port Protocol Version. This has to match with DYNAMIXEL protocol version.
-    dxl.setPortProtocolVersion(DXL_PROTOCOL_VERSION);
+    DEBUG_SERIAL.println("Cycling through baud rates to find DYNAMIXEL...");
 
-    DEBUG_SERIAL.print("PROTOCOL ");
-    DEBUG_SERIAL.print(DXL_PROTOCOL_VERSION, 1);
-    DEBUG_SERIAL.print(", ID ");
-    DEBUG_SERIAL.print(present_id);
-    DEBUG_SERIAL.print(": ");
-    if (dxl.ping(present_id) == true)
+    for (size_t i = 0; i < num_baud_rates; i++)
     {
-        DEBUG_SERIAL.print("ping succeeded!");
-        DEBUG_SERIAL.print(", Model Number: ");
-        DEBUG_SERIAL.println(dxl.getModelNumber(present_id));
+        uint32_t baud_rate = baud_rates[i];
+        dxl.begin(baud_rate);
+        dxl.setPortProtocolVersion(DXL_PROTOCOL_VERSION);
 
-        // Turn off torque when configuring items in EEPROM area
-        dxl.torqueOff(present_id);
+        DEBUG_SERIAL.print("Trying baud rate: ");
+        DEBUG_SERIAL.println(baud_rate);
 
-        // set a new ID for DYNAMIXEL. Do not use ID 200
-        new_id = 100;
-        if (dxl.setID(present_id, new_id) == true)
+        if (dxl.ping(present_id) == true)
         {
-            present_id = new_id;
-            DEBUG_SERIAL.print("ID has been successfully changed to ");
-            DEBUG_SERIAL.println(new_id);
+            DEBUG_SERIAL.print("Ping succeeded at baud rate: ");
+            DEBUG_SERIAL.println(baud_rate);
+            DEBUG_SERIAL.print("Model Number: ");
+            DEBUG_SERIAL.println(dxl.getModelNumber(present_id));
 
-            new_id = DEFAULT_DXL_ID;
+            // Turn off torque when configuring items in EEPROM area
+            dxl.torqueOff(present_id);
+
+            // Set a new ID for DYNAMIXEL. Do not use ID 200
+            new_id = 100;
             if (dxl.setID(present_id, new_id) == true)
             {
                 present_id = new_id;
-                DEBUG_SERIAL.print("ID has been successfully changed back to Original ID ");
+                DEBUG_SERIAL.print("ID has been successfully changed to ");
                 DEBUG_SERIAL.println(new_id);
+
+                new_id = DEFAULT_DXL_ID;
+                if (dxl.setID(present_id, new_id) == true)
+                {
+                    present_id = new_id;
+                    DEBUG_SERIAL.print("ID has been successfully changed back to Original ID ");
+                    DEBUG_SERIAL.println(new_id);
+                }
+                else
+                {
+                    DEBUG_SERIAL.print("Failed to change ID to ");
+                    DEBUG_SERIAL.println(new_id);
+                }
             }
             else
             {
                 DEBUG_SERIAL.print("Failed to change ID to ");
                 DEBUG_SERIAL.println(new_id);
             }
+            break; // Exit the loop if ping succeeds
         }
         else
         {
-            DEBUG_SERIAL.print("Failed to change ID to ");
-            DEBUG_SERIAL.println(new_id);
+            DEBUG_SERIAL.println("Ping failed!");
         }
     }
-    else
+
+    if (present_id == DEFAULT_DXL_ID)
     {
-        DEBUG_SERIAL.println("ping failed!");
+        DEBUG_SERIAL.println("Failed to communicate with DYNAMIXEL at all baud rates.");
     }
+
+    // Check servo info
+    uint16_t model_num_from_read = 0;
+    uint16_t model_num_from_table = 0;
+
+    model_num_from_read = dxl.getModelNumber(present_id);
+    model_num_from_table = dxl.getModelNumberFromTable(present_id);
+    int ret = dxl.read(present_id, MODEL_NUMBER_ADDR, MODEL_NUMBER_LENGTH, (uint8_t *)&model_num_from_read, sizeof(model_num_from_read), TIMEOUT);
+    DEBUG_SERIAL.printf("DYNAMIXEL Detected! ret=%d, model_num_from_read=%d, ID=%d, model_num_from_table=%d\n",
+                        ret, model_num_from_read, present_id, model_num_from_table);
+
+    ret = dxl.setModelNumber(present_id, XL430_W250);
+    model_num_from_read = dxl.getModelNumber(present_id);
+    model_num_from_table = dxl.getModelNumberFromTable(present_id);
+    uint32_t baud_rate = dxl.p_dxl_port_->getBaud();
+    DEBUG_SERIAL.printf("DYNAMIXEL Detected! ret=%d, baud_rate=%d, model_num_from_read=%d, ID=%d, model_num_from_table=%d, model_number_idx_[present_id]=%d\n",
+                        ret, baud_rate, model_num_from_read, present_id, model_num_from_table, dxl.model_number_idx_[present_id]);
 }
 
 void loop()
 {
-    // put your main code here, to run repeatedly:
+    DEBUG_SERIAL.println("LED ON...");
+    // Turn on the LED on DYNAMIXEL
+    dxl.ledOn(present_id);
+    delay(500);
+    DEBUG_SERIAL.println("LED OFF...");
+    // Turn off the LED on DYNAMIXEL
+    dxl.ledOff(present_id);
+    delay(500);
 }
