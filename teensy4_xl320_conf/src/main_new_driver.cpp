@@ -61,9 +61,11 @@ const int DXL_DIR_PIN = -1; // DYNAMIXEL Shield DIR PIN
 // const uint8_t DEFAULT_DXL_ID = 1;
 const uint8_t DEFAULT_DXL_ID = 0xFE;
 const float DXL_PROTOCOL_VERSION = 2.0;
-uint32_t baud_rates[] = {9600, 57600, 115200, 1000000, 2000000, 3000000};
+// uint32_t baud_rates[] = {9600, 57600, 115200, 1000000, 2000000, 3000000};
+uint32_t baud_rates[] = {57600};
 size_t num_baud_rates = sizeof(baud_rates) / sizeof(baud_rates[0]);
-uint8_t present_id = DEFAULT_DXL_ID;
+uint8_t target_id = DEFAULT_DXL_ID;
+uint8_t new_id = 100;
 
 Dynamixel2Arduino dxl(DXL_SERIAL, DXL_DIR_PIN);
 
@@ -73,7 +75,6 @@ using namespace ControlTableItem;
 void setup()
 {
     // put your setup code here, to run once:
-    uint8_t new_id = 0;
 
     // Use UART port of DYNAMIXEL Shield to debug.
     DEBUG_SERIAL.begin(115200);
@@ -91,35 +92,38 @@ void setup()
         DEBUG_SERIAL.print("Trying baud rate: ");
         DEBUG_SERIAL.println(baud_rate);
 
-        if (dxl.ping(present_id) == true)
+        // for (int id = 0; id < DXL_BROADCAST_ID; id++)
+        // {
+        //     // iterate until all ID in each buadrate is scanned.
+        //     if (dxl.ping(id))
+        //     {
+        //         DEBUG_SERIAL.print("ID : ");
+        //         DEBUG_SERIAL.print(id);
+        //         DEBUG_SERIAL.print(", Model Number: ");
+        //         DEBUG_SERIAL.println(dxl.getModelNumber(id));
+        //     }
+        // }
+
+        if (dxl.ping(target_id) == true)
         {
             DEBUG_SERIAL.print("Ping succeeded at baud rate: ");
             DEBUG_SERIAL.println(baud_rate);
             DEBUG_SERIAL.print("Model Number: ");
-            DEBUG_SERIAL.println(dxl.getModelNumber(present_id));
+            DEBUG_SERIAL.println(dxl.getModelNumber(target_id));
 
             // Turn off torque when configuring items in EEPROM area
-            dxl.torqueOff(present_id);
+            dxl.torqueOff(target_id);
 
             // Set a new ID for DYNAMIXEL. Do not use ID 200
-            new_id = 100;
-            if (dxl.setID(present_id, new_id) == true)
+            if (dxl.setID(target_id, new_id) == true)
             {
-                present_id = new_id;
-                DEBUG_SERIAL.print("ID has been successfully changed to ");
-                DEBUG_SERIAL.println(new_id);
 
-                new_id = DEFAULT_DXL_ID;
-                if (dxl.setID(present_id, new_id) == true)
+                if (dxl.ping(new_id))
                 {
-                    present_id = new_id;
-                    DEBUG_SERIAL.print("ID has been successfully changed back to Original ID ");
+                    DEBUG_SERIAL.print("Can PING, ID has been successfully changed to ");
                     DEBUG_SERIAL.println(new_id);
-                }
-                else
-                {
-                    DEBUG_SERIAL.print("Failed to change ID to ");
-                    DEBUG_SERIAL.println(new_id);
+                    DEBUG_SERIAL.print(", Model Number: ");
+                    DEBUG_SERIAL.println(dxl.getModelNumber(new_id));
                 }
             }
             else
@@ -127,7 +131,8 @@ void setup()
                 DEBUG_SERIAL.print("Failed to change ID to ");
                 DEBUG_SERIAL.println(new_id);
             }
-            break; // Exit the loop if ping succeeds
+            // Exit the loop if ping succeeds
+            break;
         }
         else
         {
@@ -135,7 +140,7 @@ void setup()
         }
     }
 
-    if (present_id == DEFAULT_DXL_ID)
+    if (target_id == DEFAULT_DXL_ID)
     {
         DEBUG_SERIAL.println("Failed to communicate with DYNAMIXEL at all baud rates.");
     }
@@ -144,28 +149,38 @@ void setup()
     uint16_t model_num_from_read = 0;
     uint16_t model_num_from_table = 0;
 
-    model_num_from_read = dxl.getModelNumber(present_id);
-    model_num_from_table = dxl.getModelNumberFromTable(present_id);
-    int ret = dxl.read(present_id, MODEL_NUMBER_ADDR, MODEL_NUMBER_LENGTH, (uint8_t *)&model_num_from_read, sizeof(model_num_from_read), TIMEOUT);
+    model_num_from_read = dxl.getModelNumber(target_id);
+    model_num_from_table = dxl.getModelNumberFromTable(target_id);
+    int ret = dxl.read(target_id, MODEL_NUMBER_ADDR, MODEL_NUMBER_LENGTH, (uint8_t *)&model_num_from_read, sizeof(model_num_from_read), TIMEOUT);
     DEBUG_SERIAL.printf("DYNAMIXEL Detected! ret=%d, model_num_from_read=%d, ID=%d, model_num_from_table=%d\n",
-                        ret, model_num_from_read, present_id, model_num_from_table);
+                        ret, model_num_from_read, target_id, model_num_from_table);
 
-    ret = dxl.setModelNumber(present_id, XL430_W250);
-    model_num_from_read = dxl.getModelNumber(present_id);
-    model_num_from_table = dxl.getModelNumberFromTable(present_id);
+    ret = dxl.setModelNumber(target_id, XL430_W250);
+    model_num_from_read = dxl.getModelNumber(target_id);
+    model_num_from_table = dxl.getModelNumberFromTable(target_id);
     uint32_t baud_rate = dxl.p_dxl_port_->getBaud();
-    DEBUG_SERIAL.printf("DYNAMIXEL Detected! ret=%d, baud_rate=%d, model_num_from_read=%d, ID=%d, model_num_from_table=%d, model_number_idx_[present_id]=%d\n",
-                        ret, baud_rate, model_num_from_read, present_id, model_num_from_table, dxl.model_number_idx_[present_id]);
+    DEBUG_SERIAL.printf("DYNAMIXEL Detected! ret=%d, baud_rate=%d, model_num_from_read=%d, ID=%d, model_num_from_table=%d, model_number_idx_[target_id]=%d\n",
+                        ret, baud_rate, model_num_from_read, target_id, model_num_from_table, dxl.model_number_idx_[target_id]);
+
+    dxl.torqueOn(new_id);
 }
 
 void loop()
 {
-    DEBUG_SERIAL.println("LED ON...");
+    float current_pos_raw = dxl.getPresentPosition(new_id, UNIT_RAW);
+    float current_pos_deg = dxl.getPresentPosition(new_id, UNIT_DEGREE);
+    DEBUG_SERIAL.printf("current_pos_raw=%f, current_pos_deg=%f\n",
+                        current_pos_raw, current_pos_deg);
+
     // Turn on the LED on DYNAMIXEL
-    dxl.ledOn(present_id);
+    DEBUG_SERIAL.println("LED ON at 210 deg...");
+    dxl.setGoalPosition(new_id, 210.0, UNIT_DEGREE);
+    dxl.ledOn(new_id);
     delay(500);
-    DEBUG_SERIAL.println("LED OFF...");
+
     // Turn off the LED on DYNAMIXEL
-    dxl.ledOff(present_id);
+    DEBUG_SERIAL.println("LED OFF at 180...");
+    dxl.setGoalPosition(new_id, 180.0, UNIT_DEGREE);
+    dxl.ledOff(new_id);
     delay(500);
 }
