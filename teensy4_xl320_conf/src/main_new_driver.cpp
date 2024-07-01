@@ -12,13 +12,12 @@ const int DXL_DIR_PIN = -1; // DYNAMIXEL Shield DIR PIN
 #define MODEL_NUMBER_ADDR 0
 #define MODEL_NUMBER_LENGTH 2
 
-// const uint8_t DEFAULT_DXL_ID = 1;
-const uint8_t DEFAULT_DXL_ID = 0xFE;
+const uint8_t BROADCAST_ID = 0xFE;
 const float DXL_PROTOCOL_VERSION = 2.0;
 // uint32_t baud_rates[] = {9600, 57600, 115200, 1000000, 2000000, 3000000};
 uint32_t baud_rates[] = {57600};
 size_t num_baud_rates = sizeof(baud_rates) / sizeof(baud_rates[0]);
-uint8_t target_id = DEFAULT_DXL_ID;
+uint8_t target_id = BROADCAST_ID;
 uint8_t new_id = 101;
 
 float servo_setpoint_raw = 0;
