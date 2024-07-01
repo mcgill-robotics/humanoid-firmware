@@ -244,7 +244,7 @@ int XL320::getJointPosition(int id)
 int XL320::getJointPosition(int id, Stream *debugStream)
 {
 	unsigned char buffer[255];
-	RXsendPacket(id, XL_PRESENT_POSITION, 2);
+	RXsendPacket(id, XL_PRESENT_POSITION, XL_PRESENT_POSITION_SIZE);
 	this->stream->flush();
 	if (this->readPacket(buffer, 255) > 0)
 	{
@@ -308,11 +308,13 @@ int XL320::sendPacket(int id, int Address, int value)
 
 	byte txbuffer[bufsize];
 
-	Packet p(txbuffer, bufsize, id, 0x03, 4,
+	Packet p(txbuffer, bufsize, id, DYNAMIXAL_INSTR_WRITE, ADDRESS_SIZE + PAYLOAD_SIZE,
 			 DXL_LOBYTE(Address),
 			 DXL_HIBYTE(Address),
 			 DXL_LOBYTE(value),
-			 DXL_HIBYTE(value));
+			 DXL_HIBYTE(value),
+			 DXL_LOBYTE(value >> 16),
+			 DXL_HIBYTE(value >> 16));
 
 	int size = p.getSize();
 	stream->write(txbuffer, size);
@@ -353,7 +355,7 @@ int XL320::RXsendPacket(int id, int Address, int size)
 
 	byte txbuffer[bufsize];
 
-	Packet p(txbuffer, bufsize, id, 0x02, 4,
+	Packet p(txbuffer, bufsize, id, DYNAMIXAL_INSTR_READ, 4,
 			 DXL_LOBYTE(Address),
 			 DXL_HIBYTE(Address),
 			 DXL_LOBYTE(size),

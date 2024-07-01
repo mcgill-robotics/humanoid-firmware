@@ -12,7 +12,7 @@
 #define SERVO_BAUD 1000000
 XL320 robot;
 char rgb[] = "rgbypcwo";
-int servo_id = 14;
+int servo_id = 13;
 int led_color = 0;
 float servo_setpoint_raw = 0;
 float servo_setpoint_deg = 0;
