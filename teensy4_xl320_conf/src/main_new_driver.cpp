@@ -1,3 +1,6 @@
+#include "common.h"
+#if COMPILE_CFG == 0
+
 #include <Arduino.h>
 #include "cmd_utils.hpp"
 
@@ -569,3 +572,4 @@ void loop()
     break;
   }
 }
+#endif // COMPILE_CFG

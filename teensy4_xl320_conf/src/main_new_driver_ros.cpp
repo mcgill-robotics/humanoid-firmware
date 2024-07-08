@@ -1,413 +1,226 @@
+#include "common.h"
+#if COMPILE_CFG == 1
+
 #include <Arduino.h>
+
+#include <unordered_map>
+#include <string>
+#include <vector>
+
 #include "cmd_utils.hpp"
 
 #include <Dynamixel2Arduino.h>
 
+// Include the ROS library
+#include "ros.h"
+#include "ServoCommand.h"
+#include "ServoFeedback.h"
+#include "ros_helpers.h"
+
+// ------------------ ROS ------------------
+ros::NodeHandle nh;
+void servo_cmd_cb(const humanoid_msgs::ServoCommand &input_msg);
+
+humanoid_msgs::ServoFeedback servo_fb_msg;
+ros::Publisher servo_fb_pub("servosFeedback", &servo_fb_msg);
+ros::Subscriber<humanoid_msgs::ServoCommand> servo_cmd_sub("servosCommand",
+                                                           servo_cmd_cb);
+
+// ------------------ Dynamixel ------------------
 #define DXL_SERIAL Serial1
 #define DEBUG_SERIAL SerialUSB
-// const int DXL_DIR_PIN = 2; // DYNAMIXEL Shield DIR PIN
-const int DXL_DIR_PIN = -1; // DYNAMIXEL Shield DIR PIN
-
-#define TIMEOUT 10 // default communication timeout 10ms
-#define MODEL_NUMBER_ADDR 0
-#define MODEL_NUMBER_LENGTH 2
-
-int app_choice = 0;
+const int DXL_DIR_PIN = -1;
 
 const uint8_t BROADCAST_ID = 0xFE;
 const float DXL_PROTOCOL_VERSION = 2.0;
-// uint32_t baud_rates[] = {9600, 57600, 115200, 1000000, 2000000, 3000000};
-uint32_t baud_rates[] = {57600};
-size_t num_baud_rates = sizeof(baud_rates) / sizeof(baud_rates[0]);
-// uint8_t target_id = BROADCAST_ID;
 Dynamixel2Arduino dxl(DXL_SERIAL, DXL_DIR_PIN);
 
-// ------------------- sync_read_app -------------------
-const uint8_t DXL_ID_CNT = 3;
-const uint8_t DXL_ID_LIST[DXL_ID_CNT] = {1, 2, 3};
 const uint16_t user_pkt_buf_cap = 128;
 uint8_t user_pkt_buf[user_pkt_buf_cap];
 
-// Starting address of the Data to read; Present Position = 132
 const uint16_t SR_START_ADDR = 132;
-// Length of the Data to read; Length of Position data of X series is 4 byte
 const uint16_t SR_ADDR_LEN = 4;
-// Starting address of the Data to write; Goal Position = 116
 const uint16_t SW_START_ADDR = 116;
-// Length of the Data to write; Length of Position data of X series is 4 byte
 const uint16_t SW_ADDR_LEN = 4;
+
 typedef struct sr_data
 {
-  int32_t present_position;
+  int32_t present_position_raw;
+  int32_t present_velocity_raw;
+  int32_t present_load_raw;
 } __attribute__((packed)) sr_data_t;
+
 typedef struct sw_data
 {
-  int32_t goal_position;
+  int32_t goal_position_raw;
 } __attribute__((packed)) sw_data_t;
 
-sr_data_t sr_data[DXL_ID_CNT];
-DYNAMIXEL::InfoSyncReadInst_t sr_infos;
-DYNAMIXEL::XELInfoSyncRead_t info_xels_sr[DXL_ID_CNT];
-
-sw_data_t sw_data[DXL_ID_CNT];
-DYNAMIXEL::InfoSyncWriteInst_t sw_infos;
-DYNAMIXEL::XELInfoSyncWrite_t info_xels_sw[DXL_ID_CNT];
-
-int32_t goal_position[2] = {1024, 2048};
-uint8_t goal_position_index = 0;
-// ------------------- END sync_read_app -------------------
-
-// ------------------- set_id_app -------------------
-uint8_t new_id;
-
-float servo_setpoint_raw = 0;
-float servo_setpoint_deg = 0;
-float servo_pos_raw = 0;
-float servo_pos_deg = 0;
-// ------------------- END set_id_app -------------------
-
-// ------------------- mass_scan_app -------------------
-struct DeviceInfo
+// Define the joints and their corresponding Dynamixel IDs and goal positions
+struct Joint
 {
-  int id;
-  int modelNumber;
-  uint32_t baudRate;
+  uint8_t id;
+  int32_t *goal_position_raw;
 };
 
-const int MAX_DEVICES = 32; // Maximum number of devices you expect to find
-DeviceInfo foundDevices[MAX_DEVICES];
-int foundDeviceCount = 0;
-// ------------------- END mass_scan_app -------------------
+// Map for joints
+std::unordered_map<std::string, Joint> joints = {
+    {"right_shoulder_pitch", {21, nullptr}},
+    {"right_shoulder_roll", {22, nullptr}},
+    {"right_elbow", {23, nullptr}},
+    {"left_shoulder_pitch", {11, nullptr}},
+    {"left_shoulder_roll", {12, nullptr}},
+    {"left_elbow", {13, nullptr}},
+    {"left_hip_roll", {14, nullptr}},
+    {"left_hip_pitch", {15, nullptr}},
+    {"left_knee", {16, nullptr}},
+    {"right_hip_roll", {24, nullptr}},
+    {"right_hip_pitch", {25, nullptr}},
+    {"right_knee", {26, nullptr}},
+};
 
-// This namespace is required to use Control table item names
-using namespace ControlTableItem;
+const uint8_t DXL_ID_CNT = joints.size();
+sr_data_t *sr_data = new sr_data_t[DXL_ID_CNT];
+DYNAMIXEL::InfoSyncReadInst_t sr_infos;
+DYNAMIXEL::XELInfoSyncRead_t *info_xels_sr = new DYNAMIXEL::XELInfoSyncRead_t[DXL_ID_CNT];
+sw_data_t *sw_data = new sw_data_t[DXL_ID_CNT];
+DYNAMIXEL::InfoSyncWriteInst_t sw_infos;
+DYNAMIXEL::XELInfoSyncWrite_t *info_xels_sw = new DYNAMIXEL::XELInfoSyncWrite_t[DXL_ID_CNT];
 
-// Read a number from the serial port
-int readSerialInput()
+//------------------------------------------ Prototypes ------------------------------------------
+void setup();
+void loop();
+void servo_setup();
+void servo_loop();
+void ros_setup();
+void ros_loop();
+
+void setup()
 {
-  // Clear the serial buffer
-  while (SerialUSB.available() > 0)
+  servo_setup();
+  ros_setup();
+}
+
+void loop()
+{
+  delay(10);
+  servo_loop();
+  ros_loop();
+}
+
+void ros_setup()
+{
+  nh.initNode();
+
+  nh.advertise(servo_fb_pub);
+  nh.subscribe(servo_cmd_sub);
+
+  nh.negotiateTopics();
+  while (!nh.connected())
   {
-    SerialUSB.read();
+    nh.negotiateTopics();
   }
-  while (true)
+}
+
+// Publish servo feedback
+void ros_loop()
+{
+  nh.spinOnce();
+
+  for (uint8_t i = 0; i < DXL_ID_CNT; i++)
   {
-    if (SerialUSB.available() > 0)
+    std::string joint_name;
+    for (const auto &joint : joints)
     {
-      String input = SerialUSB.readStringUntil('\n');
-      input.trim(); // Remove any leading or trailing whitespace
-      if (input.length() > 0)
+      if (joint.second.id == info_xels_sr[i].id)
       {
-        return input.toInt();
-      }
-    }
-  }
-}
-
-void process_serial_cmd()
-{
-  static String inputString = "";             // A String to hold incoming data
-  static boolean inputStringComplete = false; // Whether the string is complete
-
-  while (SerialUSB.available())
-  {
-    char inChar = (char)SerialUSB.read(); // Read each character
-    if (inChar == '\n')
-    {
-      inputStringComplete = true; // If newline, input is complete
-    }
-    else
-    {
-      inputString += inChar; // Add character to input
-    }
-  }
-
-  if (inputStringComplete)
-  {
-    SerialUSB.print("Received: ");
-    SerialUSB.println(inputString); // Echo the input for debugging
-
-    // Process the completed command
-    if (inputString.startsWith("i "))
-    {
-      // Increment command
-      float inc_deg = inputString.substring(2).toFloat(); // Extract number
-      servo_setpoint_raw = (servo_setpoint_raw + deg2raw(inc_deg));
-      SerialUSB.print("Incremented position by: ");
-      SerialUSB.println(inc_deg);
-    }
-    else if (inputString.startsWith("s "))
-    {
-      // Set command
-      servo_setpoint_deg = inputString.substring(2).toFloat(); // Extract and set new position
-      servo_setpoint_raw = deg2raw(servo_setpoint_deg);
-      SerialUSB.print("Set position to: ");
-      SerialUSB.println(servo_setpoint_deg);
-    }
-    else
-    {
-      SerialUSB.println("Unknown command");
-    }
-
-    // Clear the string for the next command
-    inputString = "";
-    inputStringComplete = false;
-  }
-}
-
-void mass_scan_app_setup()
-{
-  for (size_t i = 0; i < num_baud_rates; i++)
-  {
-    uint32_t baud_rate = baud_rates[i];
-    dxl.begin(baud_rate);
-    dxl.setPortProtocolVersion(DXL_PROTOCOL_VERSION);
-
-    DEBUG_SERIAL.print("Trying baud rate: ");
-    DEBUG_SERIAL.println(baud_rate);
-
-    for (int id = 0; id < DXL_BROADCAST_ID; id++)
-    {
-      // Iterate until all IDs in each baud rate are scanned.
-      if (dxl.ping(id))
-      {
-        int modelNumber = dxl.getModelNumber(id);
-        DEBUG_SERIAL.print("ID : ");
-        DEBUG_SERIAL.print(id);
-        DEBUG_SERIAL.print(", Model Number: ");
-        DEBUG_SERIAL.print(modelNumber);
-        DEBUG_SERIAL.print(", Baud Rate: ");
-        DEBUG_SERIAL.println(baud_rate);
-
-        // Save the found device info
-        if (foundDeviceCount < MAX_DEVICES)
-        {
-          foundDevices[foundDeviceCount].id = id;
-          foundDevices[foundDeviceCount].modelNumber = modelNumber;
-          foundDevices[foundDeviceCount].baudRate = baud_rate;
-          foundDeviceCount++;
-        }
-        else
-        {
-          DEBUG_SERIAL.println("Max device limit reached!");
-        }
-      }
-    }
-  }
-
-  DEBUG_SERIAL.print("Found ");
-  DEBUG_SERIAL.print(foundDeviceCount);
-  DEBUG_SERIAL.println(" devices.");
-}
-
-void mass_scan_app_loop()
-{
-  DEBUG_SERIAL.println("Found devices:");
-  for (int i = 0; i < foundDeviceCount; i++)
-  {
-    DEBUG_SERIAL.print("ID: ");
-    DEBUG_SERIAL.print(foundDevices[i].id);
-    DEBUG_SERIAL.print(", Model Number: ");
-    DEBUG_SERIAL.print(foundDevices[i].modelNumber);
-    DEBUG_SERIAL.print(", Baud Rate: ");
-    DEBUG_SERIAL.println(foundDevices[i].baudRate);
-
-    dxl.torqueOn(foundDevices[i].id);
-    dxl.setGoalPosition(foundDevices[i].id, 2048, UNIT_RAW);
-  }
-}
-
-void factory_reset_app_setup()
-{
-  for (size_t i = 0; i < num_baud_rates; i++)
-  {
-    uint32_t baud_rate = baud_rates[i];
-    dxl.begin(baud_rate);
-    dxl.setPortProtocolVersion(DXL_PROTOCOL_VERSION);
-    // Factory reset whole bus
-    for (uint8_t target_id = 0; target_id < DXL_BROADCAST_ID; target_id++)
-    {
-      if (dxl.ping(target_id) == true)
-      {
-        int ret = dxl.factoryReset(target_id, 0xFF, TIMEOUT);
-      }
-    }
-  }
-}
-
-void set_id_app_setup()
-{
-  int target_id = 0;
-
-  // Prompt the user for the new ID
-  DEBUG_SERIAL.println("Enter new ID for the DYNAMIXEL:");
-  new_id = readSerialInput();
-  DEBUG_SERIAL.printf("New ID entered: %d\n", new_id);
-
-  DEBUG_SERIAL.println("Cycling through baud rates to find DYNAMIXEL...");
-
-  for (size_t i = 0; i < num_baud_rates; i++)
-  {
-    uint32_t baud_rate = baud_rates[i];
-    dxl.begin(baud_rate);
-    dxl.setPortProtocolVersion(DXL_PROTOCOL_VERSION);
-
-    DEBUG_SERIAL.print("Trying baud rate: ");
-    DEBUG_SERIAL.println(baud_rate);
-
-    for (target_id = 0; target_id < DXL_BROADCAST_ID; target_id++)
-    {
-      if (dxl.ping(target_id) == true)
-      {
-        DEBUG_SERIAL.printf("PING SUCCESS target_id=%d, baud_rate=%d, model_num=%d\n",
-                            target_id, baud_rate, dxl.getModelNumber(target_id));
-
-        // Turn off torque when configuring items in EEPROM area
-        dxl.torqueOff(target_id);
-
-        // Set a new ID for DYNAMIXEL. Do not use ID 200
-        if (dxl.setID(target_id, new_id) == true)
-        {
-          DEBUG_SERIAL.printf("setID SUCCESS, target_id=%d, new_id=%d\n", target_id, new_id);
-          if (dxl.ping(new_id))
-          {
-            DEBUG_SERIAL.printf("Can PING new_id, target_id=%d, new_id=%d\n", target_id, new_id);
-            DEBUG_SERIAL.println(new_id);
-            DEBUG_SERIAL.print(", Model Number: ");
-            DEBUG_SERIAL.println(dxl.getModelNumber(new_id));
-          }
-        }
-        else
-        {
-          DEBUG_SERIAL.print("Failed to change ID to ");
-          DEBUG_SERIAL.println(new_id);
-        }
-        // Exit the loop if ping succeeds
+        joint_name = joint.first;
         break;
       }
-      else
-      {
-        DEBUG_SERIAL.printf("PING FAILED, target_id=%d\n", target_id);
-      }
     }
-  }
 
-  // Check servo info
-  uint16_t model_num_from_read = 0;
-  uint16_t model_num_from_table = 0;
-
-  model_num_from_read = dxl.getModelNumber(target_id);
-  model_num_from_table = dxl.getModelNumberFromTable(target_id);
-  int ret = dxl.read(target_id, MODEL_NUMBER_ADDR, MODEL_NUMBER_LENGTH, (uint8_t *)&model_num_from_read, sizeof(model_num_from_read), TIMEOUT);
-  DEBUG_SERIAL.printf("DYNAMIXEL Detected! ret=%d, model_num_from_read=%d, ID=%d, model_num_from_table=%d\n",
-                      ret, model_num_from_read, target_id, model_num_from_table);
-
-  ret = dxl.setModelNumber(target_id, XL430_W250);
-  model_num_from_read = dxl.getModelNumber(target_id);
-  model_num_from_table = dxl.getModelNumberFromTable(target_id);
-  uint32_t baud_rate = dxl.p_dxl_port_->getBaud();
-  DEBUG_SERIAL.printf("DYNAMIXEL Detected! ret=%d, baud_rate=%d, model_num_from_read=%d, ID=%d, model_num_from_table=%d, model_number_idx_[target_id]=%d\n",
-                      ret, baud_rate, model_num_from_read, target_id, model_num_from_table, dxl.model_number_idx_[target_id]);
-
-  dxl.torqueOn(new_id);
-}
-
-void set_id_2x_app_setup()
-{
-  const uint8_t target_id[2] = {1, 2};
-  const uint8_t target_id_cnt = sizeof(target_id) / sizeof(target_id[0]);
-  uint8_t new_id[2];
-
-  // Prompt the user for the ID of SERVO A
-  DEBUG_SERIAL.println("Enter new ID for SERVO A:");
-  new_id[0] = readSerialInput();
-  DEBUG_SERIAL.printf("New ID entered: %d\n", new_id[0]);
-
-  // Prompt the user for the ID of SERVO B
-  DEBUG_SERIAL.println("Enter new ID for SERVO B:");
-  new_id[1] = readSerialInput();
-  DEBUG_SERIAL.printf("New ID entered: %d\n", new_id[1]);
-
-  for (size_t i = 0; i < num_baud_rates; i++)
-  {
-    uint32_t baud_rate = baud_rates[i];
-    dxl.begin(baud_rate);
-    dxl.setPortProtocolVersion(DXL_PROTOCOL_VERSION);
-
-    DEBUG_SERIAL.print("Trying baud rate: ");
-    DEBUG_SERIAL.println(baud_rate);
-
-    for (int i = 0; i < target_id_cnt; i++)
+    if (!joint_name.empty())
     {
-      if (dxl.ping(target_id[i]) == true)
-      {
-        DEBUG_SERIAL.printf("PING SUCCESS target_id=%d, baud_rate=%d, model_num=%d\n",
-                            target_id[i], baud_rate, dxl.getModelNumber(target_id[i]));
+      float feedback[3] = {
+          static_cast<float>(sr_data[i].present_position_raw),
+          static_cast<float>(0.0),
+          static_cast<float>(0.0),
+          // static_cast<float>(sr_data[i].present_velocity_raw),
+          // static_cast<float>(sr_data[i].present_load_raw),
+      };
 
-        // Turn off torque when configuring items in EEPROM area
-        dxl.torqueOff(target_id[i]);
+      if (joint_name == "right_shoulder_pitch")
+        memcpy(servo_fb_msg.right_shoulder_pitch, feedback, sizeof(feedback));
+      else if (joint_name == "right_shoulder_roll")
+        memcpy(servo_fb_msg.right_shoulder_roll, feedback, sizeof(feedback));
+      else if (joint_name == "right_elbow")
+        memcpy(servo_fb_msg.right_elbow, feedback, sizeof(feedback));
+      else if (joint_name == "left_shoulder_pitch")
+        memcpy(servo_fb_msg.left_shoulder_pitch, feedback, sizeof(feedback));
+      else if (joint_name == "left_shoulder_roll")
+        memcpy(servo_fb_msg.left_shoulder_roll, feedback, sizeof(feedback));
+      else if (joint_name == "left_elbow")
+        memcpy(servo_fb_msg.left_elbow, feedback, sizeof(feedback));
+      else if (joint_name == "left_hip_roll")
+        memcpy(servo_fb_msg.left_hip_roll, feedback, sizeof(feedback));
+      else if (joint_name == "left_hip_pitch")
+        memcpy(servo_fb_msg.left_hip_pitch, feedback, sizeof(feedback));
+      else if (joint_name == "left_knee")
+        memcpy(servo_fb_msg.left_knee, feedback, sizeof(feedback));
+      else if (joint_name == "right_hip_roll")
+        memcpy(servo_fb_msg.right_hip_roll, feedback, sizeof(feedback));
+      else if (joint_name == "right_hip_pitch")
+        memcpy(servo_fb_msg.right_hip_pitch, feedback, sizeof(feedback));
+      else if (joint_name == "right_knee")
+        memcpy(servo_fb_msg.right_knee, feedback, sizeof(feedback));
+    }
+  }
 
-        // Set a new ID for DYNAMIXEL. Do not use ID 200
-        if (dxl.setID(target_id[i], new_id[i]) == true)
-        {
-          DEBUG_SERIAL.printf("setID SUCCESS, target_id=%d, new_id=%d\n", target_id[i], new_id[i]);
-          if (dxl.ping(new_id[i]))
-          {
-            DEBUG_SERIAL.printf("Can PING new_id, target_id=%d, new_id=%d\n", target_id[i], new_id[i]);
-            DEBUG_SERIAL.println(new_id[i]);
-            DEBUG_SERIAL.print(", Model Number: ");
-            DEBUG_SERIAL.println(dxl.getModelNumber(new_id[i]));
-          }
-        }
-        else
-        {
-          DEBUG_SERIAL.print("Failed to change ID to ");
-          DEBUG_SERIAL.println(new_id[i]);
-        }
-        // Exit the loop if ping succeeds
-        break;
-      }
-      else
-      {
-        DEBUG_SERIAL.printf("PING FAILED, target_id=%d\n", target_id[i]);
-      }
+  servo_fb_pub.publish(&servo_fb_msg);
+}
+
+// Save setpoints from ROS message
+void servo_cmd_cb(const humanoid_msgs::ServoCommand &input_msg)
+{
+  std::unordered_map<std::string, int32_t> joint_positions = {
+      {"right_shoulder_pitch", input_msg.right_shoulder_pitch},
+      {"right_shoulder_roll", input_msg.right_shoulder_roll},
+      {"right_elbow", input_msg.right_elbow},
+      {"left_shoulder_pitch", input_msg.left_shoulder_pitch},
+      {"left_shoulder_roll", input_msg.left_shoulder_roll},
+      {"left_elbow", input_msg.left_elbow},
+      {"left_hip_roll", input_msg.left_hip_roll},
+      {"left_hip_pitch", input_msg.left_hip_pitch},
+      {"left_knee", input_msg.left_knee},
+      {"right_hip_roll", input_msg.right_hip_roll},
+      {"right_hip_pitch", input_msg.right_hip_pitch},
+      {"right_knee", input_msg.right_knee}};
+
+  for (const auto &joint : joint_positions)
+  {
+    auto it = joints.find(joint.first);
+    if (it != joints.end())
+    {
+      *(it->second.goal_position_raw) = joint.second;
     }
   }
 }
 
-void set_id_app_loop()
+void servo_setup()
 {
-  float current_pos_raw = dxl.getPresentPosition(new_id, UNIT_RAW);
-  float current_pos_deg = dxl.getPresentPosition(new_id, UNIT_DEGREE);
-  DEBUG_SERIAL.printf("new_id=%d, current_pos_raw=%f, current_pos_deg=%f\n",
-                      new_id, current_pos_raw, current_pos_deg);
-
-  // Turn on the LED on DYNAMIXEL
-  DEBUG_SERIAL.println("LED ON at 210 deg...");
-  dxl.setGoalPosition(new_id, 210.0, UNIT_DEGREE);
-  dxl.ledOn(new_id);
-  delay(500);
-
-  // Turn off the LED on DYNAMIXEL
-  DEBUG_SERIAL.println("LED OFF at 180 deg...");
-  dxl.setGoalPosition(new_id, 180.0, UNIT_DEGREE);
-  dxl.ledOff(new_id);
-  delay(500);
-}
-
-void sync_read_app_setup()
-{
-  uint8_t i;
-  pinMode(LED_BUILTIN, OUTPUT);
-
   dxl.begin(57600);
   dxl.setPortProtocolVersion(DXL_PROTOCOL_VERSION);
 
-  // Prepare the SyncRead structure
-  for (i = 0; i < DXL_ID_CNT; i++)
+  uint8_t index = 0;
+  for (auto &joint : joints)
   {
-    dxl.torqueOff(DXL_ID_LIST[i]);
-    dxl.setOperatingMode(DXL_ID_LIST[i], OP_POSITION);
+    joint.second.goal_position_raw = &sw_data[index].goal_position_raw;
+    dxl.torqueOff(joint.second.id);
+    dxl.setOperatingMode(joint.second.id, OP_POSITION);
+    info_xels_sr[index].id = joint.second.id;
+    info_xels_sr[index].p_recv_buf = (uint8_t *)&sr_data[index];
+    info_xels_sw[index].id = joint.second.id;
+    info_xels_sw[index].p_data = (uint8_t *)&sw_data[index].goal_position_raw;
+    index++;
   }
   dxl.torqueOn(BROADCAST_ID);
 
@@ -418,14 +231,7 @@ void sync_read_app_setup()
   sr_infos.addr = SR_START_ADDR;
   sr_infos.addr_length = SR_ADDR_LEN;
   sr_infos.p_xels = info_xels_sr;
-  sr_infos.xel_count = 0;
-
-  for (i = 0; i < DXL_ID_CNT; i++)
-  {
-    info_xels_sr[i].id = DXL_ID_LIST[i];
-    info_xels_sr[i].p_recv_buf = (uint8_t *)&sr_data[i];
-    sr_infos.xel_count++;
-  }
+  sr_infos.xel_count = DXL_ID_CNT;
   sr_infos.is_info_changed = true;
 
   // Fill the members of structure to syncWrite using internal packet buffer
@@ -434,56 +240,35 @@ void sync_read_app_setup()
   sw_infos.addr = SW_START_ADDR;
   sw_infos.addr_length = SW_ADDR_LEN;
   sw_infos.p_xels = info_xels_sw;
-  sw_infos.xel_count = 0;
-
-  for (i = 0; i < DXL_ID_CNT; i++)
-  {
-    info_xels_sw[i].id = DXL_ID_LIST[i];
-    info_xels_sw[i].p_data = (uint8_t *)&sw_data[i].goal_position;
-    sw_infos.xel_count++;
-  }
+  sw_infos.xel_count = DXL_ID_CNT;
   sw_infos.is_info_changed = true;
 }
 
-void sync_read_app_loop()
+void servo_loop()
 {
   static uint32_t try_count = 0;
   uint8_t i, recv_cnt;
 
-  // Insert a new Goal Position to the SyncWrite Packet
-  for (i = 0; i < DXL_ID_CNT; i++)
-  {
-    sw_data[i].goal_position = goal_position[goal_position_index];
-  }
-
   // Update the SyncWrite packet status
   sw_infos.is_info_changed = true;
 
-  DEBUG_SERIAL.print("\n>>>>>> Sync Instruction Test : ");
-  DEBUG_SERIAL.println(try_count++);
+  ros_printf("\n>>>>>> Sync Instruction Test : %u\n", try_count++);
 
   // Build a SyncWrite Packet and transmit to DYNAMIXEL
   if (dxl.syncWrite(&sw_infos) == true)
   {
-    DEBUG_SERIAL.println("[SyncWrite] Success");
+    ros_printf("[SyncWrite] Success\n");
     for (i = 0; i < sw_infos.xel_count; i++)
     {
-      DEBUG_SERIAL.print("  ID: ");
-      DEBUG_SERIAL.println(sw_infos.p_xels[i].id);
-      DEBUG_SERIAL.print("\t Goal Position: ");
-      DEBUG_SERIAL.println(sw_data[i].goal_position);
+      ros_printf("  ID: %u\n", sw_infos.p_xels[i].id);
+      ros_printf("\t Goal Position: %d\n", sw_data[i].goal_position_raw);
     }
-    if (goal_position_index == 0)
-      goal_position_index = 1;
-    else
-      goal_position_index = 0;
   }
   else
   {
-    DEBUG_SERIAL.print("[SyncWrite] Fail, Lib error code: ");
-    DEBUG_SERIAL.print(dxl.getLastLibErrCode());
+    ros_printf("[SyncWrite] Fail, Lib error code: %d\n", dxl.getLastLibErrCode());
   }
-  DEBUG_SERIAL.println();
+  ros_printf("\n");
 
   delay(250);
 
@@ -492,80 +277,20 @@ void sync_read_app_loop()
   recv_cnt = dxl.syncRead(&sr_infos);
   if (recv_cnt > 0)
   {
-    DEBUG_SERIAL.print("[SyncRead] Success, Received ID Count: ");
-    DEBUG_SERIAL.println(recv_cnt);
+    ros_printf("[SyncRead] Success, Received ID Count: %u\n", recv_cnt);
     for (i = 0; i < recv_cnt; i++)
     {
-      DEBUG_SERIAL.print("  ID: ");
-      DEBUG_SERIAL.print(sr_infos.p_xels[i].id);
-      DEBUG_SERIAL.print(", Error: ");
-      DEBUG_SERIAL.println(sr_infos.p_xels[i].error);
-      DEBUG_SERIAL.print("\t Present Position: ");
-      DEBUG_SERIAL.println(sr_data[i].present_position);
+      ros_printf("  ID: %u, Error: %u\n", sr_infos.p_xels[i].id, sr_infos.p_xels[i].error);
+      ros_printf("\t Present Position: %d\n", sr_data[i].present_position_raw);
     }
   }
   else
   {
-    DEBUG_SERIAL.print("[SyncRead] Fail, Lib error code: ");
-    DEBUG_SERIAL.println(dxl.getLastLibErrCode());
+    ros_printf("[SyncRead] Fail, Lib error code: %d\n", dxl.getLastLibErrCode());
   }
-  DEBUG_SERIAL.println("=======================================================");
+  ros_printf("=======================================================\n");
 
   digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
   delay(750);
 }
-
-void setup()
-{
-  DEBUG_SERIAL.begin(115200);
-  while (!DEBUG_SERIAL)
-    ;
-
-  DEBUG_SERIAL.printf("App choice\n");
-  DEBUG_SERIAL.printf("\t0: mass_scan_app, also sets the servos to default position\n");
-  DEBUG_SERIAL.printf("\t1: set_id_app, for single servo only\n");
-  DEBUG_SERIAL.printf("\t2: sync_read_app, test 2 servos sync read write\n");
-  DEBUG_SERIAL.printf("\t3: factory_reset_app, factory reset config for the whole bus\n");
-  DEBUG_SERIAL.printf("\t4: set_id_2x_app, for 2XL430\n");
-
-  app_choice = readSerialInput();
-  switch (app_choice)
-  {
-  case 0:
-    mass_scan_app_setup();
-    break;
-  case 1:
-    set_id_app_setup();
-    break;
-  case 2:
-    sync_read_app_setup();
-    break;
-  case 3:
-    factory_reset_app_setup();
-  case 4:
-    set_id_2x_app_setup();
-  }
-}
-
-void loop()
-{
-  switch (app_choice)
-  {
-  case 0:
-    mass_scan_app_loop();
-    break;
-  case 1:
-    set_id_app_loop();
-    break;
-  case 2:
-    sync_read_app_loop();
-    break;
-  case 3:
-    delay(1000);
-    DEBUG_SERIAL.println("factory_reset_app");
-  case 4:
-    delay(1000);
-    DEBUG_SERIAL.println("set_id_2x_app");
-    break;
-  }
-}
+#endif // COMPILE_CFG
