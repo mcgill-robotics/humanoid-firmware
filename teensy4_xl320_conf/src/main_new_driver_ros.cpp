@@ -2,13 +2,10 @@
 #if COMPILE_CFG == 1
 
 #include <Arduino.h>
-
 #include <unordered_map>
 #include <string>
 #include <vector>
-
 #include "cmd_utils.hpp"
-
 #include <Dynamixel2Arduino.h>
 
 // Include the ROS library
@@ -17,14 +14,25 @@
 #include "ServoFeedback.h"
 #include "ros_helpers.h"
 
+// Function to check available memory
+extern "C"
+{
+  char *sbrk(int incr);
+}
+
+int freeMemory()
+{
+  char top;
+  return &top - reinterpret_cast<char *>(sbrk(0));
+}
+
 // ------------------ ROS ------------------
 ros::NodeHandle nh;
 void servo_cmd_cb(const humanoid_msgs::ServoCommand &input_msg);
 
 humanoid_msgs::ServoFeedback servo_fb_msg;
 ros::Publisher servo_fb_pub("servosFeedback", &servo_fb_msg);
-ros::Subscriber<humanoid_msgs::ServoCommand> servo_cmd_sub("servosCommand",
-                                                           servo_cmd_cb);
+ros::Subscriber<humanoid_msgs::ServoCommand> servo_cmd_sub("servosCommand", servo_cmd_cb);
 
 // ------------------ Dynamixel ------------------
 #define DXL_SERIAL Serial1
@@ -35,7 +43,7 @@ const uint8_t BROADCAST_ID = 0xFE;
 const float DXL_PROTOCOL_VERSION = 2.0;
 Dynamixel2Arduino dxl(DXL_SERIAL, DXL_DIR_PIN);
 
-const uint16_t user_pkt_buf_cap = 128;
+const uint16_t user_pkt_buf_cap = 1024;
 uint8_t user_pkt_buf[user_pkt_buf_cap];
 
 const uint16_t SR_START_ADDR = 132;
@@ -48,12 +56,12 @@ typedef struct sr_data
   int32_t present_position_raw;
   int32_t present_velocity_raw;
   int32_t present_load_raw;
-} __attribute__((packed)) sr_data_t;
+} sr_data_t;
 
 typedef struct sw_data
 {
   int32_t goal_position_raw;
-} __attribute__((packed)) sw_data_t;
+} sw_data_t;
 
 // Define the joints and their corresponding Dynamixel IDs and goal positions
 struct Joint
@@ -78,13 +86,22 @@ std::unordered_map<std::string, Joint> joints = {
     {"right_knee", {26, nullptr}},
 };
 
-const uint8_t DXL_ID_CNT = joints.size();
-sr_data_t *sr_data = new sr_data_t[DXL_ID_CNT];
+// const uint8_t DXL_ID_CNT = joints.size();
+// sr_data_t *sr_data = new sr_data_t[DXL_ID_CNT];
+// DYNAMIXEL::InfoSyncReadInst_t sr_infos;
+// DYNAMIXEL::XELInfoSyncRead_t *info_xels_sr = new DYNAMIXEL::XELInfoSyncRead_t[DXL_ID_CNT];
+// sw_data_t *sw_data = new sw_data_t[DXL_ID_CNT];
+// DYNAMIXEL::InfoSyncWriteInst_t sw_infos;
+// DYNAMIXEL::XELInfoSyncWrite_t *info_xels_sw = new DYNAMIXEL::XELInfoSyncWrite_t[DXL_ID_CNT];
+
+// const uint8_t DXL_ID_CNT = joints.size();
+const uint8_t DXL_ID_CNT = 12;
+sr_data_t sr_data[DXL_ID_CNT];
 DYNAMIXEL::InfoSyncReadInst_t sr_infos;
-DYNAMIXEL::XELInfoSyncRead_t *info_xels_sr = new DYNAMIXEL::XELInfoSyncRead_t[DXL_ID_CNT];
-sw_data_t *sw_data = new sw_data_t[DXL_ID_CNT];
+DYNAMIXEL::XELInfoSyncRead_t info_xels_sr[DXL_ID_CNT];
+sw_data_t sw_data[DXL_ID_CNT];
 DYNAMIXEL::InfoSyncWriteInst_t sw_infos;
-DYNAMIXEL::XELInfoSyncWrite_t *info_xels_sw = new DYNAMIXEL::XELInfoSyncWrite_t[DXL_ID_CNT];
+DYNAMIXEL::XELInfoSyncWrite_t info_xels_sw[DXL_ID_CNT];
 
 //------------------------------------------ Prototypes ------------------------------------------
 void setup();
@@ -96,19 +113,31 @@ void ros_loop();
 
 void setup()
 {
+  Serial2.begin(115200);
+  pinMode(LED_BUILTIN, OUTPUT);
+
+  Serial2.printf("Free memory before allocation: %d bytes\r\n", freeMemory());
+
+  Serial2.printf("DXL_ID_CNT=%d\r\n", DXL_ID_CNT); // Debugging line
+  Serial2.printf("Setup start\r\n");               // Debugging line
   servo_setup();
   ros_setup();
-}
+  Serial2.printf("Setup end\r\n"); // Debugging line
 
+  Serial2.printf("Free memory after allocation: %d bytes\r\n", freeMemory());
+}
 void loop()
 {
   delay(10);
+  Serial2.printf("Entering loop\r\n"); // Debugging line
   servo_loop();
   ros_loop();
+  Serial2.printf("Exiting loop\r\n"); // Debugging line
 }
 
 void ros_setup()
 {
+  Serial2.printf("%s() start\r\n", __func__);
   nh.initNode();
 
   nh.advertise(servo_fb_pub);
@@ -118,12 +147,15 @@ void ros_setup()
   while (!nh.connected())
   {
     nh.negotiateTopics();
+    Serial2.printf("Waiting for ROS connection...\r\n"); // Debugging line
   }
+  Serial2.printf("%s() end\r\n", __func__);
 }
 
 // Publish servo feedback
 void ros_loop()
 {
+  Serial2.printf("%s() start\r\n", __func__);
   nh.spinOnce();
 
   for (uint8_t i = 0; i < DXL_ID_CNT; i++)
@@ -144,8 +176,6 @@ void ros_loop()
           static_cast<float>(sr_data[i].present_position_raw),
           static_cast<float>(0.0),
           static_cast<float>(0.0),
-          // static_cast<float>(sr_data[i].present_velocity_raw),
-          // static_cast<float>(sr_data[i].present_load_raw),
       };
 
       if (joint_name == "right_shoulder_pitch")
@@ -176,11 +206,13 @@ void ros_loop()
   }
 
   servo_fb_pub.publish(&servo_fb_msg);
+  Serial2.printf("%s() end\r\n", __func__);
 }
 
 // Save setpoints from ROS message
 void servo_cmd_cb(const humanoid_msgs::ServoCommand &input_msg)
 {
+  Serial2.printf("%s() start\r\n", __func__);
   std::unordered_map<std::string, int32_t> joint_positions = {
       {"right_shoulder_pitch", input_msg.right_shoulder_pitch},
       {"right_shoulder_roll", input_msg.right_shoulder_roll},
@@ -200,26 +232,47 @@ void servo_cmd_cb(const humanoid_msgs::ServoCommand &input_msg)
     auto it = joints.find(joint.first);
     if (it != joints.end())
     {
-      *(it->second.goal_position_raw) = joint.second;
+      if (it->second.goal_position_raw != nullptr)
+      {
+        *(it->second.goal_position_raw) = joint.second;
+      }
+      else
+      {
+        Serial2.printf("Null pointer detected for joint: %s\r\n", joint.first.c_str());
+      }
+    }
+    else
+    {
+      Serial2.printf("Joint not found: %s\r\n", joint.first.c_str());
     }
   }
+  Serial2.printf("%s() end\r\n", __func__);
 }
 
 void servo_setup()
 {
+  Serial2.printf("%s() start\r\n", __func__);
   dxl.begin(57600);
   dxl.setPortProtocolVersion(DXL_PROTOCOL_VERSION);
 
   uint8_t index = 0;
   for (auto &joint : joints)
   {
-    joint.second.goal_position_raw = &sw_data[index].goal_position_raw;
+    joint.second.goal_position_raw = &(sw_data[index].goal_position_raw);
     dxl.torqueOff(joint.second.id);
     dxl.setOperatingMode(joint.second.id, OP_POSITION);
     info_xels_sr[index].id = joint.second.id;
     info_xels_sr[index].p_recv_buf = (uint8_t *)&sr_data[index];
     info_xels_sw[index].id = joint.second.id;
     info_xels_sw[index].p_data = (uint8_t *)&sw_data[index].goal_position_raw;
+    index++;
+  }
+
+  // Set the goal position to the center for all joints
+  index = 0;
+  for (auto &joint : joints)
+  {
+    sw_data[index].goal_position_raw = 2048;
     index++;
   }
   dxl.torqueOn(BROADCAST_ID);
@@ -242,33 +295,35 @@ void servo_setup()
   sw_infos.p_xels = info_xels_sw;
   sw_infos.xel_count = DXL_ID_CNT;
   sw_infos.is_info_changed = true;
+  Serial2.printf("%s() end\r\n", __func__);
 }
 
 void servo_loop()
 {
+  Serial2.printf("%s() start\r\n", __func__);
   static uint32_t try_count = 0;
   uint8_t i, recv_cnt;
 
   // Update the SyncWrite packet status
   sw_infos.is_info_changed = true;
 
-  ros_printf("\n>>>>>> Sync Instruction Test : %u\n", try_count++);
+  Serial2.printf("\n>>>>>> Sync Instruction Test : %u\r\n", try_count++);
 
   // Build a SyncWrite Packet and transmit to DYNAMIXEL
   if (dxl.syncWrite(&sw_infos) == true)
   {
-    ros_printf("[SyncWrite] Success\n");
+    Serial2.printf("[SyncWrite] Success\r\n");
     for (i = 0; i < sw_infos.xel_count; i++)
     {
-      ros_printf("  ID: %u\n", sw_infos.p_xels[i].id);
-      ros_printf("\t Goal Position: %d\n", sw_data[i].goal_position_raw);
+      Serial2.printf("  ID: %u\r\n", sw_infos.p_xels[i].id);
+      Serial2.printf("\t Goal Position: %d\r\n", sw_data[i].goal_position_raw);
     }
   }
   else
   {
-    ros_printf("[SyncWrite] Fail, Lib error code: %d\n", dxl.getLastLibErrCode());
+    Serial2.printf("[SyncWrite] Fail, Lib error code: %d\r\n", dxl.getLastLibErrCode());
   }
-  ros_printf("\n");
+  Serial2.printf("\r\n");
 
   delay(250);
 
@@ -277,20 +332,21 @@ void servo_loop()
   recv_cnt = dxl.syncRead(&sr_infos);
   if (recv_cnt > 0)
   {
-    ros_printf("[SyncRead] Success, Received ID Count: %u\n", recv_cnt);
+    Serial2.printf("[SyncRead] Success, Received ID Count: %u\r\n", recv_cnt);
     for (i = 0; i < recv_cnt; i++)
     {
-      ros_printf("  ID: %u, Error: %u\n", sr_infos.p_xels[i].id, sr_infos.p_xels[i].error);
-      ros_printf("\t Present Position: %d\n", sr_data[i].present_position_raw);
+      Serial2.printf("  ID: %u, Error: %u\r\n", sr_infos.p_xels[i].id, sr_infos.p_xels[i].error);
+      Serial2.printf("\t Present Position: %d\r\n", sr_data[i].present_position_raw);
     }
   }
   else
   {
-    ros_printf("[SyncRead] Fail, Lib error code: %d\n", dxl.getLastLibErrCode());
+    Serial2.printf("[SyncRead] Fail, Lib error code: %d\r\n", dxl.getLastLibErrCode());
   }
-  ros_printf("=======================================================\n");
+  Serial2.printf("=======================================================\r\n");
 
   digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
   delay(750);
+  Serial2.printf("%s() end\r\n", __func__);
 }
 #endif // COMPILE_CFG
