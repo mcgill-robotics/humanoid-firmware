@@ -15,7 +15,7 @@ const int DXL_DIR_PIN = -1; // DYNAMIXEL Shield DIR PIN
 #define MODEL_NUMBER_ADDR 0
 #define MODEL_NUMBER_LENGTH 2
 
-int app_choice = 0;
+volatile int app_choice = 0;
 
 const uint8_t BROADCAST_ID = 0xFE;
 const float DXL_PROTOCOL_VERSION = 2.0;
@@ -27,7 +27,7 @@ Dynamixel2Arduino dxl(DXL_SERIAL, DXL_DIR_PIN);
 
 // ------------------- sync_read_app -------------------
 const uint8_t DXL_ID_CNT = 3;
-const uint8_t DXL_ID_LIST[DXL_ID_CNT] = {1, 2, 3};
+const uint8_t DXL_ID_LIST[DXL_ID_CNT] = {21, 22, 23};
 const uint16_t user_pkt_buf_cap = 128;
 uint8_t user_pkt_buf[user_pkt_buf_cap];
 
@@ -258,6 +258,7 @@ void set_id_app_setup()
     DEBUG_SERIAL.print("Trying baud rate: ");
     DEBUG_SERIAL.println(baud_rate);
 
+    // Ping all IDs until the target ID is found
     for (target_id = 0; target_id < DXL_BROADCAST_ID; target_id++)
     {
       if (dxl.ping(target_id) == true)
@@ -272,6 +273,7 @@ void set_id_app_setup()
         if (dxl.setID(target_id, new_id) == true)
         {
           DEBUG_SERIAL.printf("setID SUCCESS, target_id=%d, new_id=%d\n", target_id, new_id);
+          // Try to ping the new ID
           if (dxl.ping(new_id))
           {
             DEBUG_SERIAL.printf("Can PING new_id, target_id=%d, new_id=%d\n", target_id, new_id);
@@ -331,6 +333,8 @@ void set_id_2x_app_setup()
   new_id[1] = readSerialInput();
   DEBUG_SERIAL.printf("New ID entered: %d\n", new_id[1]);
 
+  new_id[0] = 22;
+  new_id[1] = 23;
   for (size_t i = 0; i < num_baud_rates; i++)
   {
     uint32_t baud_rate = baud_rates[i];
@@ -364,11 +368,8 @@ void set_id_2x_app_setup()
         }
         else
         {
-          DEBUG_SERIAL.print("Failed to change ID to ");
-          DEBUG_SERIAL.println(new_id[i]);
+          DEBUG_SERIAL.printf("Failed to change target_id=%d to new_id=%d\n", target_id[i], new_id[i]);
         }
-        // Exit the loop if ping succeeds
-        break;
       }
       else
       {
