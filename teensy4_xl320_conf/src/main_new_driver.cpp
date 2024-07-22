@@ -26,6 +26,8 @@ size_t num_baud_rates = sizeof(baud_rates) / sizeof(baud_rates[0]);
 Dynamixel2Arduino dxl(DXL_SERIAL, DXL_DIR_PIN);
 
 // ------------------- sync_read_app -------------------
+// const uint8_t DXL_ID_CNT = 12;
+// const uint8_t DXL_ID_LIST[DXL_ID_CNT] = {11, 12, 13, 14, 15, 16, 21, 22, 23, 24, 25, 26};
 const uint8_t DXL_ID_CNT = 3;
 const uint8_t DXL_ID_LIST[DXL_ID_CNT] = {21, 22, 23};
 const uint16_t user_pkt_buf_cap = 128;
@@ -233,6 +235,7 @@ void factory_reset_app_setup()
       if (dxl.ping(target_id) == true)
       {
         int ret = dxl.factoryReset(target_id, 0xFF, TIMEOUT);
+        DEBUG_SERIAL.printf("Factory Reset target_id=%d, ret=%d\n", target_id, ret);
       }
     }
   }
