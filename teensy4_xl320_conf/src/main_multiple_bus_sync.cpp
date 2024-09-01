@@ -89,6 +89,32 @@ DynamixelBusConfig_t bus2 = {
     .user_pkt_buf = {0}                             // Initialize user packet buffer to zero
 };
 
+DynamixelBusConfig_t bus3 = {
+    .dxl = Dynamixel2Arduino(Serial3, DXL_DIR_PIN), // Dynamixel2Arduino object for Serial2
+    .id_list = {14, 15, 16},                        // Adjust IDs for bus2
+    .id_count = DXL_ID_CNT,                         // Number of IDs in the list
+    .sr_data = {},                                  // Initialize SyncRead data to zero
+    .sr_infos = {},                                 // Initialize SyncRead info structure
+    .info_xels_sr = {},                             // Initialize SyncRead XEL info array
+    .sw_data = {},                                  // Initialize SyncWrite data to zero
+    .sw_infos = {},                                 // Initialize SyncWrite info structure
+    .info_xels_sw = {},                             // Initialize SyncWrite XEL info array
+    .user_pkt_buf = {0}                             // Initialize user packet buffer to zero
+};
+
+DynamixelBusConfig_t bus4 = {
+    .dxl = Dynamixel2Arduino(Serial4, DXL_DIR_PIN), // Dynamixel2Arduino object for Serial2
+    .id_list = {24, 25, 26},                        // Adjust IDs for bus2
+    .id_count = DXL_ID_CNT,                         // Number of IDs in the list
+    .sr_data = {},                                  // Initialize SyncRead data to zero
+    .sr_infos = {},                                 // Initialize SyncRead info structure
+    .info_xels_sr = {},                             // Initialize SyncRead XEL info array
+    .sw_data = {},                                  // Initialize SyncWrite data to zero
+    .sw_infos = {},                                 // Initialize SyncWrite info structure
+    .info_xels_sw = {},                             // Initialize SyncWrite XEL info array
+    .user_pkt_buf = {0}                             // Initialize user packet buffer to zero
+};
+
 int32_t goal_position[2] = {1024, 2048};
 uint8_t goal_position_index = 0;
 // ------------------- END sync_read_app -------------------
@@ -204,7 +230,7 @@ void sync_read_app_loop(DynamixelBusConfig_t *config)
       DEBUG_SERIAL.print("\t Goal Position: ");
       DEBUG_SERIAL.println(config->sw_data[i].goal_position);
     }
-    goal_position_index = (goal_position_index == 0) ? 1 : 0;
+    // goal_position_index = (goal_position_index == 0) ? 1 : 0;
   }
   else
   {
@@ -213,7 +239,7 @@ void sync_read_app_loop(DynamixelBusConfig_t *config)
   }
   DEBUG_SERIAL.println();
 
-  delay(100);
+  delay(50);
 
   // Transmit predefined SyncRead instruction packet
   // and receive a status packet from each DYNAMIXEL
@@ -240,7 +266,7 @@ void sync_read_app_loop(DynamixelBusConfig_t *config)
   DEBUG_SERIAL.println("=======================================================");
 
   digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
-  delay(100);
+  delay(50);
 }
 
 void setup()
@@ -251,13 +277,18 @@ void setup()
 
   DEBUG_SERIAL.printf("Multiple bus sync read write app\n");
 
-  // sync_read_app_setup(&bus1);
+  sync_read_app_setup(&bus1);
   sync_read_app_setup(&bus2);
+  sync_read_app_setup(&bus3);
+  sync_read_app_setup(&bus4);
 }
 
 void loop()
 {
-  // sync_read_app_loop(&bus1);
+  sync_read_app_loop(&bus1);
   sync_read_app_loop(&bus2);
+  sync_read_app_loop(&bus3);
+  sync_read_app_loop(&bus4);
+  goal_position_index = (goal_position_index == 0) ? 1 : 0;
 }
 #endif // COMPILE_CFG
