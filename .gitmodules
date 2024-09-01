@@ -1,0 +1,3 @@
+[submodule "teensy4_xl320_conf/lib/Dynamixel2Arduino"]
+	path = teensy4_xl320_conf/lib/Dynamixel2Arduino
+	url = https://github.com/mn297/Dynamixel2Arduino.git
