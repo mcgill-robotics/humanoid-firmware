@@ -29,7 +29,7 @@ Dynamixel2Arduino dxl(DXL_SERIAL, DXL_DIR_PIN);
 // const uint8_t DXL_ID_CNT = 12;
 // const uint8_t DXL_ID_LIST[DXL_ID_CNT] = {11, 12, 13, 14, 15, 16, 21, 22, 23, 24, 25, 26};
 const uint8_t DXL_ID_CNT = 3;
-const uint8_t DXL_ID_LIST[DXL_ID_CNT] = {21, 22, 23};
+const uint8_t DXL_ID_LIST[DXL_ID_CNT] = {11, 12, 13};
 const uint16_t user_pkt_buf_cap = 128;
 uint8_t user_pkt_buf[user_pkt_buf_cap];
 
@@ -336,8 +336,8 @@ void set_id_2x_app_setup()
   new_id[1] = readSerialInput();
   DEBUG_SERIAL.printf("New ID entered: %d\n", new_id[1]);
 
-  new_id[0] = 22;
-  new_id[1] = 23;
+  // new_id[0] = 22;
+  // new_id[1] = 23;
   for (size_t i = 0; i < num_baud_rates; i++)
   {
     uint32_t baud_rate = baud_rates[i];
