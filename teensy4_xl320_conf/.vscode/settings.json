@@ -2,6 +2,8 @@
     "files.associations": {
         "*.yml": "yaml",
         "*.rviz": "yaml",
+        "*.urdf": "xml",
+        "*.xacro": "xml",
         "array": "cpp",
         "deque": "cpp",
         "string": "cpp",
@@ -45,7 +47,8 @@
         "stdexcept": "cpp",
         "streambuf": "cpp",
         "cinttypes": "cpp",
-        "typeinfo": "cpp"
+        "typeinfo": "cpp",
+        "optional": "cpp"
     },
     "stm32-for-vscode.openOCDPath": false,
     "stm32-for-vscode.makePath": false,
