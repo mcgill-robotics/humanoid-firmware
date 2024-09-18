@@ -1,5 +1,5 @@
 #include "common.h"
-#if COMPILE_CFG == 3
+#if COMPILE_CFG == 1
 
 #include <Arduino.h>
 #include "cmd_utils.hpp"
@@ -60,7 +60,7 @@ void populate_joint_id_to_name()
 }
 
 // ------------------ Dynamixel ------------------
-#define DEBUG_SERIAL SerialUSB
+#define DEBUG_SERIAL Serial5
 // const int DXL_DIR_PIN = 2; // DYNAMIXEL Shield DIR PIN
 const int DXL_DIR_PIN = -1; // DYNAMIXEL Shield DIR PIN
 
@@ -435,8 +435,8 @@ void ros_loop()
 void setup()
 {
   DEBUG_SERIAL.begin(115200);
-  // while (!DEBUG_SERIAL)
-  //   ;
+  while (!DEBUG_SERIAL)
+    ;
 
   DEBUG_SERIAL.printf("Multiple bus sync read write app\n");
 

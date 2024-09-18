@@ -1,5 +1,5 @@
 #include "common.h"
-#if COMPILE_CFG == 2
+#if COMPILE_CFG == 0
 
 #include <Arduino.h>
 #include "cmd_utils.hpp"

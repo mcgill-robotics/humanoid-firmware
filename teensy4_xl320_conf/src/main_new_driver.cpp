@@ -1,5 +1,5 @@
 #include "common.h"
-#if COMPILE_CFG == 0
+#if COMPILE_CFG == 2
 
 #include <Arduino.h>
 #include "cmd_utils.hpp"
@@ -235,7 +235,7 @@ void factory_reset_app_setup()
       if (dxl.ping(target_id) == true)
       {
         int ret = dxl.factoryReset(target_id, 0xFF, TIMEOUT);
-        DEBUG_SERIAL.printf("Factory Reset target_id=%d, ret=%d\n", target_id, ret);
+        DEBUG_SERIAL.printf("Factory Reset target_id=%d, ret=%d\r\n", target_id, ret);
       }
     }
   }
@@ -266,7 +266,7 @@ void set_id_app_setup()
     {
       if (dxl.ping(target_id) == true)
       {
-        DEBUG_SERIAL.printf("PING SUCCESS target_id=%d, baud_rate=%d, model_num=%d\n",
+        DEBUG_SERIAL.printf("PING SUCCESS target_id=%d, baud_rate=%d, model_num=%d\r\n",
                             target_id, baud_rate, dxl.getModelNumber(target_id));
 
         // Turn off torque when configuring items in EEPROM area
@@ -275,11 +275,11 @@ void set_id_app_setup()
         // Set a new ID for DYNAMIXEL. Do not use ID 200
         if (dxl.setID(target_id, new_id) == true)
         {
-          DEBUG_SERIAL.printf("setID SUCCESS, target_id=%d, new_id=%d\n", target_id, new_id);
+          DEBUG_SERIAL.printf("setID SUCCESS, target_id=%d, new_id=%d\r\n", target_id, new_id);
           // Try to ping the new ID
           if (dxl.ping(new_id))
           {
-            DEBUG_SERIAL.printf("Can PING new_id, target_id=%d, new_id=%d\n", target_id, new_id);
+            DEBUG_SERIAL.printf("Can PING new_id, target_id=%d, new_id=%d\r\n", target_id, new_id);
             DEBUG_SERIAL.println(new_id);
             DEBUG_SERIAL.print(", Model Number: ");
             DEBUG_SERIAL.println(dxl.getModelNumber(new_id));
@@ -307,14 +307,14 @@ void set_id_app_setup()
   model_num_from_read = dxl.getModelNumber(target_id);
   model_num_from_table = dxl.getModelNumberFromTable(target_id);
   int ret = dxl.read(target_id, MODEL_NUMBER_ADDR, MODEL_NUMBER_LENGTH, (uint8_t *)&model_num_from_read, sizeof(model_num_from_read), TIMEOUT);
-  DEBUG_SERIAL.printf("DYNAMIXEL Detected! ret=%d, model_num_from_read=%d, ID=%d, model_num_from_table=%d\n",
+  DEBUG_SERIAL.printf("DYNAMIXEL Detected! ret=%d, model_num_from_read=%d, ID=%d, model_num_from_table=%d\r\n",
                       ret, model_num_from_read, target_id, model_num_from_table);
 
   ret = dxl.setModelNumber(target_id, XL430_W250);
   model_num_from_read = dxl.getModelNumber(target_id);
   model_num_from_table = dxl.getModelNumberFromTable(target_id);
   uint32_t baud_rate = dxl.p_dxl_port_->getBaud();
-  DEBUG_SERIAL.printf("DYNAMIXEL Detected! ret=%d, baud_rate=%d, model_num_from_read=%d, ID=%d, model_num_from_table=%d, model_number_idx_[target_id]=%d\n",
+  DEBUG_SERIAL.printf("DYNAMIXEL Detected! ret=%d, baud_rate=%d, model_num_from_read=%d, ID=%d, model_num_from_table=%d, model_number_idx_[target_id]=%d\r\n",
                       ret, baud_rate, model_num_from_read, target_id, model_num_from_table, dxl.model_number_idx_[target_id]);
 
   dxl.torqueOn(new_id);
@@ -329,12 +329,12 @@ void set_id_2x_app_setup()
   // Prompt the user for the ID of SERVO A
   DEBUG_SERIAL.println("Enter new ID for SERVO A:");
   new_id[0] = readSerialInput();
-  DEBUG_SERIAL.printf("New ID entered: %d\n", new_id[0]);
+  DEBUG_SERIAL.printf("New ID entered: %d\r\n", new_id[0]);
 
   // Prompt the user for the ID of SERVO B
   DEBUG_SERIAL.println("Enter new ID for SERVO B:");
   new_id[1] = readSerialInput();
-  DEBUG_SERIAL.printf("New ID entered: %d\n", new_id[1]);
+  DEBUG_SERIAL.printf("New ID entered: %d\r\n", new_id[1]);
 
   // new_id[0] = 22;
   // new_id[1] = 23;
@@ -351,7 +351,7 @@ void set_id_2x_app_setup()
     {
       if (dxl.ping(target_id[i]) == true)
       {
-        DEBUG_SERIAL.printf("PING SUCCESS target_id=%d, baud_rate=%d, model_num=%d\n",
+        DEBUG_SERIAL.printf("PING SUCCESS target_id=%d, baud_rate=%d, model_num=%d\r\n",
                             target_id[i], baud_rate, dxl.getModelNumber(target_id[i]));
 
         // Turn off torque when configuring items in EEPROM area
@@ -360,10 +360,10 @@ void set_id_2x_app_setup()
         // Set a new ID for DYNAMIXEL. Do not use ID 200
         if (dxl.setID(target_id[i], new_id[i]) == true)
         {
-          DEBUG_SERIAL.printf("setID SUCCESS, target_id=%d, new_id=%d\n", target_id[i], new_id[i]);
+          DEBUG_SERIAL.printf("setID SUCCESS, target_id=%d, new_id=%d\r\n", target_id[i], new_id[i]);
           if (dxl.ping(new_id[i]))
           {
-            DEBUG_SERIAL.printf("Can PING new_id, target_id=%d, new_id=%d\n", target_id[i], new_id[i]);
+            DEBUG_SERIAL.printf("Can PING new_id, target_id=%d, new_id=%d\r\n", target_id[i], new_id[i]);
             DEBUG_SERIAL.println(new_id[i]);
             DEBUG_SERIAL.print(", Model Number: ");
             DEBUG_SERIAL.println(dxl.getModelNumber(new_id[i]));
@@ -371,12 +371,12 @@ void set_id_2x_app_setup()
         }
         else
         {
-          DEBUG_SERIAL.printf("Failed to change target_id=%d to new_id=%d\n", target_id[i], new_id[i]);
+          DEBUG_SERIAL.printf("Failed to change target_id=%d to new_id=%d\r\n", target_id[i], new_id[i]);
         }
       }
       else
       {
-        DEBUG_SERIAL.printf("PING FAILED, target_id=%d\n", target_id[i]);
+        DEBUG_SERIAL.printf("PING FAILED, target_id=%d\r\n", target_id[i]);
       }
     }
   }
@@ -386,7 +386,7 @@ void set_id_app_loop()
 {
   float current_pos_raw = dxl.getPresentPosition(new_id, UNIT_RAW);
   float current_pos_deg = dxl.getPresentPosition(new_id, UNIT_DEGREE);
-  DEBUG_SERIAL.printf("new_id=%d, current_pos_raw=%f, current_pos_deg=%f\n",
+  DEBUG_SERIAL.printf("new_id=%d, current_pos_raw=%f, current_pos_deg=%f\r\n",
                       new_id, current_pos_raw, current_pos_deg);
 
   // Turn on the LED on DYNAMIXEL
@@ -528,12 +528,12 @@ void setup()
   while (!DEBUG_SERIAL)
     ;
 
-  DEBUG_SERIAL.printf("App choice\n");
-  DEBUG_SERIAL.printf("\t0: mass_scan_app, also sets the servos to default position\n");
-  DEBUG_SERIAL.printf("\t1: set_id_app, for single servo only\n");
-  DEBUG_SERIAL.printf("\t2: sync_read_app, test 2 servos sync read write\n");
-  DEBUG_SERIAL.printf("\t3: factory_reset_app, factory reset config for the whole bus\n");
-  DEBUG_SERIAL.printf("\t4: set_id_2x_app, for 2XL430\n");
+  DEBUG_SERIAL.printf("App choice\r\n");
+  DEBUG_SERIAL.printf("\t0: mass_scan_app, also sets the servos to default position\r\n");
+  DEBUG_SERIAL.printf("\t1: set_id_app, for single servo only\r\n");
+  DEBUG_SERIAL.printf("\t2: sync_read_app, test 2 servos sync read write\r\n");
+  DEBUG_SERIAL.printf("\t3: factory_reset_app, factory reset config for the whole bus\r\n");
+  DEBUG_SERIAL.printf("\t4: set_id_2x_app, for 2XL430\r\n");
 
   app_choice = readSerialInput();
   switch (app_choice)

@@ -1,5 +1,5 @@
 #include "common.h"
-#if COMPILE_CFG == 1
+#if COMPILE_CFG == 99
 
 #include <Arduino.h>
 #include <unordered_map>

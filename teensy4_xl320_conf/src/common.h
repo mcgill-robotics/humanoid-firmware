@@ -1,1 +1,1 @@
-#define COMPILE_CFG 3
+#define COMPILE_CFG 2
