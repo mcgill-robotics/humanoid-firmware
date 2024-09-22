@@ -25,40 +25,6 @@ humanoid_msgs::ServoFeedback servo_fb_msg;
 ros::Publisher servo_fb_pub("servosFeedback", &servo_fb_msg);
 ros::Subscriber<humanoid_msgs::ServoCommand> servo_cmd_sub("servosCommand", servo_cmd_cb);
 
-// Define the joints and their corresponding Dynamixel IDs and goal positions
-struct Joint
-{
-  uint8_t id;
-  int32_t goal_position_raw;
-  int32_t current_position_raw;
-};
-
-// Map for joints with nullopt for current_position_raw
-std::unordered_map<std::string, Joint> joints_map = {
-    {"right_shoulder_pitch", {21, 2048, INT32_MIN}},
-    {"right_shoulder_roll", {22, 2048, INT32_MIN}},
-    {"right_elbow", {23, 2048, INT32_MIN}},
-    {"left_shoulder_pitch", {11, 2048, INT32_MIN}},
-    {"left_shoulder_roll", {12, 2048, INT32_MIN}},
-    {"left_elbow", {13, 2048, INT32_MIN}},
-    {"left_hip_roll", {14, 2048, INT32_MIN}},
-    {"left_hip_pitch", {15, 2048, INT32_MIN}},
-    {"left_knee", {16, 2048, INT32_MIN}},
-    {"right_hip_roll", {24, 2048, INT32_MIN}},
-    {"right_hip_pitch", {25, 2048, INT32_MIN}},
-    {"right_knee", {26, 2048, INT32_MIN}},
-};
-std::unordered_map<uint8_t, std::string> joint_id_to_name;
-
-// Function to populate the reverse lookup map
-void populate_joint_id_to_name()
-{
-  for (const auto &joint : joints_map)
-  {
-    joint_id_to_name[joint.second.id] = joint.first;
-  }
-}
-
 // ------------------ Dynamixel ------------------
 #define DEBUG_SERIAL Serial5
 // const int DXL_DIR_PIN = 2; // DYNAMIXEL Shield DIR PIN
@@ -171,6 +137,79 @@ DynamixelBusConfig_t bus4 = {
 
 int32_t goal_position[2] = {1024, 2048};
 uint8_t goal_position_index = 0;
+
+// Define the joints and their corresponding Dynamixel IDs and goal positions
+class Joint
+{
+public:
+  // Constructor
+  Joint(const std::string &name, uint8_t id, DynamixelBusConfig_t *bus)
+      : name(name), id(id), goal_position_raw(2048), current_position_raw(INT32_MIN), bus(bus) {}
+
+  // Members
+  std::string name;
+  uint8_t id;
+  int32_t goal_position_raw;
+  int32_t current_position_raw;
+  DynamixelBusConfig_t *bus; // Pointer to the associated bus
+};
+
+static int32_t degToRaw(float degrees)
+{
+  return static_cast<int32_t>(degrees * (4095.0 / 360.0));
+}
+
+static float rawToDeg(int32_t raw)
+{
+  return static_cast<float>(raw) * (360.0 / 4095.0);
+}
+
+// Declare Joint objects statically
+// Joints for bus1 (IDs 11, 12, 13)
+Joint left_shoulder_pitch("left_shoulder_pitch", 11, &bus1);
+Joint left_shoulder_roll("left_shoulder_roll", 12, &bus1);
+Joint left_elbow("left_elbow", 13, &bus1);
+
+// Joints for bus2 (IDs 21, 22, 23)
+Joint right_shoulder_pitch("right_shoulder_pitch", 21, &bus2);
+Joint right_shoulder_roll("right_shoulder_roll", 22, &bus2);
+Joint right_elbow("right_elbow", 23, &bus2);
+
+// Joints for bus3 (IDs 14, 15, 16)
+Joint left_hip_roll("left_hip_roll", 14, &bus3);
+Joint left_hip_pitch("left_hip_pitch", 15, &bus3);
+Joint left_knee("left_knee", 16, &bus3);
+
+// Joints for bus4 (IDs 24, 25, 26)
+Joint right_hip_roll("right_hip_roll", 24, &bus4);
+Joint right_hip_pitch("right_hip_pitch", 25, &bus4);
+Joint right_knee("right_knee", 26, &bus4);
+
+// Populate joints_map with pointers to these objects
+std::unordered_map<std::string, Joint *> joints_map = {
+    {"right_shoulder_pitch", &right_shoulder_pitch},
+    {"right_shoulder_roll", &right_shoulder_roll},
+    {"right_elbow", &right_elbow},
+    {"left_shoulder_pitch", &left_shoulder_pitch},
+    {"left_shoulder_roll", &left_shoulder_roll},
+    {"left_elbow", &left_elbow},
+    {"left_hip_roll", &left_hip_roll},
+    {"left_hip_pitch", &left_hip_pitch},
+    {"left_knee", &left_knee},
+    {"right_hip_roll", &right_hip_roll},
+    {"right_hip_pitch", &right_hip_pitch},
+    {"right_knee", &right_knee}};
+
+std::unordered_map<uint8_t, std::string> joint_id_to_name;
+
+// Function to populate the reverse lookup map
+void populate_joint_id_to_name()
+{
+  for (const auto &pair : joints_map)
+  {
+    joint_id_to_name[pair.second->id] = pair.first;
+  }
+}
 // ------------------- END sync_read_app -------------------
 
 // This namespace is required to use Control table item names
@@ -221,6 +260,9 @@ void sync_read_app_setup(DynamixelBusConfig_t *config)
   // Configure SyncWrite XELs
   for (size_t i = 0; i < config->id_count; i++)
   {
+    // Initialize the goal positions to the center
+    config->sw_data[i].goal_position = 2048;
+
     config->info_xels_sw[i].id = config->id_list[i];
     config->info_xels_sw[i].p_data = (uint8_t *)&config->sw_data[i].goal_position;
     config->sw_infos.xel_count++;
@@ -239,10 +281,10 @@ void sync_read_app_loop(DynamixelBusConfig_t *config)
   uint8_t recv_cnt;
 
   // Insert a new Goal Position to the SyncWrite Packet
-  for (size_t i = 0; i < config->id_count; i++)
-  {
-    config->sw_data[i].goal_position = goal_position[goal_position_index];
-  }
+  // for (size_t i = 0; i < config->id_count; i++)
+  // {
+  //   config->sw_data[i].goal_position = goal_position[goal_position_index];
+  // }
   DEBUG_SERIAL.printf("current goal_position %d\n", config->sw_data[0].goal_position);
 
   // Update the SyncWrite packet status
@@ -257,10 +299,13 @@ void sync_read_app_loop(DynamixelBusConfig_t *config)
     DEBUG_SERIAL.println("[SyncWrite] Success");
     for (size_t i = 0; i < config->sw_infos.xel_count; i++)
     {
-      DEBUG_SERIAL.print("  ID: ");
-      DEBUG_SERIAL.println(config->sw_infos.p_xels[i].id);
-      DEBUG_SERIAL.print("\t Goal Position: ");
-      DEBUG_SERIAL.println(config->sw_data[i].goal_position);
+      DEBUG_SERIAL.printf("\tID=%d, name=%s\r\n",
+                          config->info_xels_sw[i].id,
+                          joint_id_to_name[config->info_xels_sw[i].id].c_str());
+
+      DEBUG_SERIAL.printf("\t\tgoal_position_raw=%d, goal_position_deg=%f\r\n",
+                          config->sw_data[i].goal_position,
+                          rawToDeg(config->sw_data[i].goal_position));
     }
     // goal_position_index = (goal_position_index == 0) ? 1 : 0;
   }
@@ -282,12 +327,12 @@ void sync_read_app_loop(DynamixelBusConfig_t *config)
     DEBUG_SERIAL.println(recv_cnt);
     for (size_t i = 0; i < recv_cnt; i++)
     {
-      DEBUG_SERIAL.print("  ID: ");
-      DEBUG_SERIAL.print(config->sr_infos.p_xels[i].id);
-      DEBUG_SERIAL.print(", Error: ");
-      DEBUG_SERIAL.println(config->sr_infos.p_xels[i].error);
-      DEBUG_SERIAL.print("\t Present Position: ");
-      DEBUG_SERIAL.println(config->sr_data[i].present_position);
+      DEBUG_SERIAL.printf("\tID=%d, name=%s",
+                          config->info_xels_sr[i].id,
+                          joint_id_to_name[config->info_xels_sr[i].id].c_str());
+      DEBUG_SERIAL.printf("\t\tpresent_position_raw=%d, present_position_deg=%f\r\n",
+                          config->sr_data[i].present_position,
+                          rawToDeg(config->sr_data[i].present_position));
     }
   }
   else
@@ -305,6 +350,8 @@ void sync_read_app_loop(DynamixelBusConfig_t *config)
 void servo_cmd_cb(const humanoid_msgs::ServoCommand &input_msg)
 {
   DEBUG_SERIAL.printf("%s() start\r\n", __func__);
+
+  // Map of joint names to their desired positions from the ROS message
   std::unordered_map<std::string, int32_t> joint_positions = {
       {"right_shoulder_pitch", input_msg.right_shoulder_pitch},
       {"right_shoulder_roll", input_msg.right_shoulder_roll},
@@ -319,22 +366,44 @@ void servo_cmd_cb(const humanoid_msgs::ServoCommand &input_msg)
       {"right_hip_pitch", input_msg.right_hip_pitch},
       {"right_knee", input_msg.right_knee}};
 
-  // TODO apply the goal positions to the sw_data
-  // uint8_t index = 0;
-  // for (const auto &joint : joint_positions)
-  // {
-  //   auto it = joints_map.find(joint.first);
-  //   if (it != joints_map.end())
-  //   {
-  //     it->second.goal_position_raw = deg2raw(joint.second);
-  //     sw_data[index].goal_position_raw = deg2raw(joint.second);
-  //   }
-  //   else
-  //   {
-  //     DEBUG_SERIAL.printf("Joint not found: %s\r\n", joint.first.c_str());
-  //   }
-  //   index++;
-  // }
+  // Iterate through each joint and update its goal position
+  for (const auto &joint : joint_positions)
+  {
+    auto it = joints_map.find(joint.first);
+    if (it != joints_map.end())
+    {
+      Joint *joint_ptr = it->second;
+      joint_ptr->goal_position_raw = degToRaw(joint.second);
+
+      // Update the corresponding SyncWrite data
+      DynamixelBusConfig_t *bus = joint_ptr->bus;
+
+      // Find the index of this joint's ID in the bus's id_list
+      int index = -1;
+      for (size_t i = 0; i < bus->id_count; i++)
+      {
+        if (bus->id_list[i] == joint_ptr->id)
+        {
+          index = i;
+          break;
+        }
+      }
+
+      if (index != -1)
+      {
+        bus->sw_data[index].goal_position = joint_ptr->goal_position_raw;
+      }
+      else
+      {
+        DEBUG_SERIAL.printf("Joint ID %d not found in bus's id_list.\n", joint_ptr->id);
+      }
+    }
+    else
+    {
+      DEBUG_SERIAL.printf("Joint not found: %s\r\n", joint.first.c_str());
+    }
+  }
+
   DEBUG_SERIAL.printf("%s() end\r\n", __func__);
 }
 
@@ -380,6 +449,9 @@ void process_bus_feedback(DynamixelBusConfig_t *bus_config)
     if (it != joint_id_to_name.end())
     {
       std::string joint_name = it->second;
+      Joint *joint_ptr = joints_map[joint_name];
+      joint_ptr->current_position_raw = bus_config->sr_data[i].present_position;
+
       float feedback[3] = {
           static_cast<float>(bus_config->sr_data[i].present_position),
           static_cast<float>(0.0),
