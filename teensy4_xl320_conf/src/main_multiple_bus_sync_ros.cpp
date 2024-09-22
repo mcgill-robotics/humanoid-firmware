@@ -27,6 +27,19 @@ ros::Subscriber<humanoid_msgs::ServoCommand> servo_cmd_sub("servosCommand", serv
 
 // ------------------ Dynamixel ------------------
 #define DEBUG_SERIAL Serial5
+// Uncomment the next line to enable debug printing
+#define ENABLE_DEBUG_PRINT // Comment this line to disable debug prints
+
+#ifdef ENABLE_DEBUG_PRINT
+#define DEBUG_PRINT(x) DEBUG_SERIAL.print(x)
+#define DEBUG_PRINTLN(x) DEBUG_SERIAL.println(x)
+#define DEBUG_PRINTF(...) DEBUG_SERIAL.printf(__VA_ARGS__)
+#else
+#define DEBUG_PRINT(x)    // Empty definition
+#define DEBUG_PRINTLN(x)  // Empty definition
+#define DEBUG_PRINTF(...) // Empty definition
+#endif
+
 // const int DXL_DIR_PIN = 2; // DYNAMIXEL Shield DIR PIN
 const int DXL_DIR_PIN = -1; // DYNAMIXEL Shield DIR PIN
 
@@ -85,20 +98,21 @@ typedef struct
 
 DynamixelBusConfig_t bus1 = {
     .dxl = Dynamixel2Arduino(Serial1, DXL_DIR_PIN), // Dynamixel2Arduino object for Serial1
-    .id_list = {11, 12, 13},                        // IDs of Dynamixel motors
-    .id_count = DXL_ID_CNT,                         // Number of IDs in the list
-    .sr_data = {},                                  // Initialize SyncRead data to zero
-    .sr_infos = {},                                 // Initialize SyncRead info structure
-    .info_xels_sr = {},                             // Initialize SyncRead XEL info array
-    .sw_data = {},                                  // Initialize SyncWrite data to zero
-    .sw_infos = {},                                 // Initialize SyncWrite info structure
-    .info_xels_sw = {},                             // Initialize SyncWrite XEL info array
-    .user_pkt_buf = {0}                             // Initialize user packet buffer to zero
+    .id_list = {11, 12, 13},                        // Adjust IDs for bus2
+    // .id_list = {11, 12, 13},                        // IDs of Dynamixel motors
+    .id_count = DXL_ID_CNT, // Number of IDs in the list
+    .sr_data = {},          // Initialize SyncRead data to zero
+    .sr_infos = {},         // Initialize SyncRead info structure
+    .info_xels_sr = {},     // Initialize SyncRead XEL info array
+    .sw_data = {},          // Initialize SyncWrite data to zero
+    .sw_infos = {},         // Initialize SyncWrite info structure
+    .info_xels_sw = {},     // Initialize SyncWrite XEL info array
+    .user_pkt_buf = {0}     // Initialize user packet buffer to zero
 };
 
 DynamixelBusConfig_t bus2 = {
     .dxl = Dynamixel2Arduino(Serial2, DXL_DIR_PIN), // Dynamixel2Arduino object for Serial2
-    .id_list = {21, 22, 23},                        // Adjust IDs for bus2
+    .id_list = {14, 15, 16},                        // Adjust IDs for bus2
     .id_count = DXL_ID_CNT,                         // Number of IDs in the list
     .sr_data = {},                                  // Initialize SyncRead data to zero
     .sr_infos = {},                                 // Initialize SyncRead info structure
@@ -111,7 +125,7 @@ DynamixelBusConfig_t bus2 = {
 
 DynamixelBusConfig_t bus3 = {
     .dxl = Dynamixel2Arduino(Serial3, DXL_DIR_PIN), // Dynamixel2Arduino object for Serial2
-    .id_list = {14, 15, 16},                        // Adjust IDs for bus2
+    .id_list = {21, 22, 23},                        // Adjust IDs for bus2
     .id_count = DXL_ID_CNT,                         // Number of IDs in the list
     .sr_data = {},                                  // Initialize SyncRead data to zero
     .sr_infos = {},                                 // Initialize SyncRead info structure
@@ -124,15 +138,16 @@ DynamixelBusConfig_t bus3 = {
 
 DynamixelBusConfig_t bus4 = {
     .dxl = Dynamixel2Arduino(Serial4, DXL_DIR_PIN), // Dynamixel2Arduino object for Serial2
-    .id_list = {24, 25, 26},                        // Adjust IDs for bus2
-    .id_count = DXL_ID_CNT,                         // Number of IDs in the list
-    .sr_data = {},                                  // Initialize SyncRead data to zero
-    .sr_infos = {},                                 // Initialize SyncRead info structure
-    .info_xels_sr = {},                             // Initialize SyncRead XEL info array
-    .sw_data = {},                                  // Initialize SyncWrite data to zero
-    .sw_infos = {},                                 // Initialize SyncWrite info structure
-    .info_xels_sw = {},                             // Initialize SyncWrite XEL info array
-    .user_pkt_buf = {0}                             // Initialize user packet buffer to zero
+    .id_list = {24, 25, 26},                        // IDs of Dynamixel motors
+    // .id_list = {24, 25, 26},                        // Adjust IDs for bus2
+    .id_count = DXL_ID_CNT, // Number of IDs in the list
+    .sr_data = {},          // Initialize SyncRead data to zero
+    .sr_infos = {},         // Initialize SyncRead info structure
+    .info_xels_sr = {},     // Initialize SyncRead XEL info array
+    .sw_data = {},          // Initialize SyncWrite data to zero
+    .sw_infos = {},         // Initialize SyncWrite info structure
+    .info_xels_sw = {},     // Initialize SyncWrite XEL info array
+    .user_pkt_buf = {0}     // Initialize user packet buffer to zero
 };
 
 int32_t goal_position[2] = {1024, 2048};
@@ -165,25 +180,21 @@ static float rawToDeg(int32_t raw)
 }
 
 // Declare Joint objects statically
-// Joints for bus1 (IDs 11, 12, 13)
-Joint left_shoulder_pitch("left_shoulder_pitch", 11, &bus1);
-Joint left_shoulder_roll("left_shoulder_roll", 12, &bus1);
-Joint left_elbow("left_elbow", 13, &bus1);
+Joint left_knee("left_knee", 11, &bus1);
+Joint left_hip_roll("left_hip_roll", 12, &bus1);
+Joint left_hip_pitch("left_hip_pitch", 13, &bus1);
 
-// Joints for bus2 (IDs 21, 22, 23)
-Joint right_shoulder_pitch("right_shoulder_pitch", 21, &bus2);
-Joint right_shoulder_roll("right_shoulder_roll", 22, &bus2);
-Joint right_elbow("right_elbow", 23, &bus2);
+Joint left_elbow("left_elbow", 14, &bus2);
+Joint left_shoulder_roll("left_shoulder_roll", 15, &bus2);
+Joint left_shoulder_pitch("left_shoulder_pitch", 16, &bus2);
 
-// Joints for bus3 (IDs 14, 15, 16)
-Joint left_hip_roll("left_hip_roll", 14, &bus3);
-Joint left_hip_pitch("left_hip_pitch", 15, &bus3);
-Joint left_knee("left_knee", 16, &bus3);
+Joint right_knee("right_knee", 21, &bus3);
+Joint right_hip_roll("right_hip_roll", 22, &bus3);
+Joint right_hip_pitch("right_hip_pitch", 23, &bus3);
 
-// Joints for bus4 (IDs 24, 25, 26)
-Joint right_hip_roll("right_hip_roll", 24, &bus4);
-Joint right_hip_pitch("right_hip_pitch", 25, &bus4);
-Joint right_knee("right_knee", 26, &bus4);
+Joint right_elbow("right_elbow", 24, &bus4);
+Joint right_shoulder_roll("right_shoulder_roll", 25, &bus4);
+Joint right_shoulder_pitch("right_shoulder_pitch", 26, &bus4);
 
 // Populate joints_map with pointers to these objects
 std::unordered_map<std::string, Joint *> joints_map = {
@@ -285,36 +296,36 @@ void sync_read_app_loop(DynamixelBusConfig_t *config)
   // {
   //   config->sw_data[i].goal_position = goal_position[goal_position_index];
   // }
-  DEBUG_SERIAL.printf("current goal_position %d\n", config->sw_data[0].goal_position);
+  DEBUG_PRINTF("current goal_position %d\n", config->sw_data[0].goal_position);
 
   // Update the SyncWrite packet status
   config->sw_infos.is_info_changed = true;
 
-  DEBUG_SERIAL.print("\n>>>>>> Sync Instruction Test : ");
-  DEBUG_SERIAL.println(try_count++);
+  DEBUG_PRINT("\n>>>>>> Sync Instruction Test : ");
+  DEBUG_PRINTLN(try_count++);
 
   // Build a SyncWrite Packet and transmit to DYNAMIXEL
   if (config->dxl.syncWrite(&config->sw_infos) == true)
   {
-    DEBUG_SERIAL.println("[SyncWrite] Success");
+    DEBUG_PRINTLN("[SyncWrite] Success");
     for (size_t i = 0; i < config->sw_infos.xel_count; i++)
     {
-      DEBUG_SERIAL.printf("\tID=%d, name=%s\r\n",
-                          config->info_xels_sw[i].id,
-                          joint_id_to_name[config->info_xels_sw[i].id].c_str());
+      DEBUG_PRINTF("\tID=%d, name=%s\r\n",
+                   config->info_xels_sw[i].id,
+                   joint_id_to_name[config->info_xels_sw[i].id].c_str());
 
-      DEBUG_SERIAL.printf("\t\tgoal_position_raw=%d, goal_position_deg=%f\r\n",
-                          config->sw_data[i].goal_position,
-                          rawToDeg(config->sw_data[i].goal_position));
+      DEBUG_PRINTF("\t\tgoal_position_raw=%d, goal_position_deg=%f\r\n",
+                   config->sw_data[i].goal_position,
+                   rawToDeg(config->sw_data[i].goal_position));
     }
     // goal_position_index = (goal_position_index == 0) ? 1 : 0;
   }
   else
   {
-    DEBUG_SERIAL.print("[SyncWrite] Fail, Lib error code: ");
-    DEBUG_SERIAL.print(config->dxl.getLastLibErrCode());
+    DEBUG_PRINT("[SyncWrite] Fail, Lib error code: ");
+    DEBUG_PRINT(config->dxl.getLastLibErrCode());
   }
-  DEBUG_SERIAL.println();
+  DEBUG_PRINTLN();
 
   delay(50);
 
@@ -323,36 +334,55 @@ void sync_read_app_loop(DynamixelBusConfig_t *config)
   recv_cnt = config->dxl.syncRead(&config->sr_infos);
   if (recv_cnt > 0)
   {
-    DEBUG_SERIAL.print("[SyncRead] Success, Received ID Count: ");
-    DEBUG_SERIAL.println(recv_cnt);
+    DEBUG_PRINT("[SyncRead] Success, Received ID Count: ");
+    DEBUG_PRINTLN(recv_cnt);
     for (size_t i = 0; i < recv_cnt; i++)
     {
-      DEBUG_SERIAL.printf("\tID=%d, name=%s",
-                          config->info_xels_sr[i].id,
-                          joint_id_to_name[config->info_xels_sr[i].id].c_str());
-      DEBUG_SERIAL.printf("\t\tpresent_position_raw=%d, present_position_deg=%f\r\n",
-                          config->sr_data[i].present_position,
-                          rawToDeg(config->sr_data[i].present_position));
+      DEBUG_PRINTF("\tID=%d, name=%s\r\n",
+                   config->info_xels_sr[i].id,
+                   joint_id_to_name[config->info_xels_sr[i].id].c_str());
+      DEBUG_PRINTF("\t\tpresent_position_raw=%d, present_position_deg=%f\r\n",
+                   config->sr_data[i].present_position,
+                   rawToDeg(config->sr_data[i].present_position));
     }
   }
   else
   {
-    DEBUG_SERIAL.print("[SyncRead] Fail, Lib error code: ");
-    DEBUG_SERIAL.println(config->dxl.getLastLibErrCode());
+    DEBUG_PRINT("[SyncRead] Fail, Lib error code: ");
+    DEBUG_PRINTLN(config->dxl.getLastLibErrCode());
   }
-  DEBUG_SERIAL.println("=======================================================");
+  DEBUG_PRINTLN("=======================================================");
 
   digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
   delay(50);
 }
 
+// Map of joint names to their desired positions from the ROS message
+std::unordered_map<std::string, int32_t> joint_initial_positions = {
+    {"left_knee", 180.0f},
+    {"left_hip_pitch", 180.0f},
+    {"left_hip_roll", 180.0f},
+
+    {"left_elbow", 180.0f},
+    {"left_shoulder_pitch", 180.0f},
+    {"left_shoulder_roll", 180.0f},
+
+    {"right_knee", 180.0f},
+    {"right_hip_roll", 180.0f},
+    {"right_hip_pitch", 180.0f},
+
+    {"right_elbow", 180.0f},
+    {"right_shoulder_pitch", 180.0f},
+    {"right_shoulder_roll", 180.0f},
+};
+
 // Update sw_data with the goal positions from the ROS message
 void servo_cmd_cb(const humanoid_msgs::ServoCommand &input_msg)
 {
-  DEBUG_SERIAL.printf("%s() start\r\n", __func__);
+  DEBUG_PRINTF("%s() start\r\n", __func__);
 
   // Map of joint names to their desired positions from the ROS message
-  std::unordered_map<std::string, int32_t> joint_positions = {
+  std::unordered_map<std::string, float> joint_positions = {
       {"right_shoulder_pitch", input_msg.right_shoulder_pitch},
       {"right_shoulder_roll", input_msg.right_shoulder_roll},
       {"right_elbow", input_msg.right_elbow},
@@ -395,23 +425,23 @@ void servo_cmd_cb(const humanoid_msgs::ServoCommand &input_msg)
       }
       else
       {
-        DEBUG_SERIAL.printf("Joint ID %d not found in bus's id_list.\n", joint_ptr->id);
+        DEBUG_PRINTF("Joint ID %d not found in bus's id_list.\n", joint_ptr->id);
       }
     }
     else
     {
-      DEBUG_SERIAL.printf("Joint not found: %s\r\n", joint.first.c_str());
+      DEBUG_PRINTF("Joint not found: %s\r\n", joint.first.c_str());
     }
   }
 
-  DEBUG_SERIAL.printf("%s() end\r\n", __func__);
+  DEBUG_PRINTF("%s() end\r\n", __func__);
 }
 
 void ros_setup()
 {
   populate_joint_id_to_name();
 
-  DEBUG_SERIAL.printf("%s() start\r\n", __func__);
+  DEBUG_PRINTF("%s() start\r\n", __func__);
   nh.initNode();
 
   nh.advertise(servo_fb_pub);
@@ -421,7 +451,7 @@ void ros_setup()
   while (!nh.connected())
   {
     nh.negotiateTopics();
-    DEBUG_SERIAL.printf("Waiting for ROS connection...\r\n"); // Debugging line
+    DEBUG_PRINTF("Waiting for ROS connection...\r\n"); // Debugging line
   }
 
   servo_fb_msg.right_shoulder_pitch_length = 3;
@@ -437,7 +467,7 @@ void ros_setup()
   servo_fb_msg.right_hip_pitch_length = 3;
   servo_fb_msg.right_knee_length = 3;
 
-  DEBUG_SERIAL.printf("%s() end\r\n", __func__);
+  DEBUG_PRINTF("%s() end\r\n", __func__);
 }
 
 void process_bus_feedback(DynamixelBusConfig_t *bus_config)
@@ -486,7 +516,7 @@ void process_bus_feedback(DynamixelBusConfig_t *bus_config)
     }
     else
     {
-      DEBUG_SERIAL.printf("Joint ID %d not found in joint_id_to_name map.\n", id);
+      DEBUG_PRINTF("Joint ID %d not found in joint_id_to_name map.\n", id);
     }
   }
 }
@@ -510,7 +540,7 @@ void setup()
   while (!DEBUG_SERIAL)
     ;
 
-  DEBUG_SERIAL.printf("Multiple bus sync read write app\n");
+  DEBUG_PRINTF("Multiple bus sync read write app\n");
 
   sync_read_app_setup(&bus1);
   sync_read_app_setup(&bus2);
