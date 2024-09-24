@@ -361,19 +361,19 @@ void sync_read_app_loop(DynamixelBusConfig_t *config)
 std::unordered_map<std::string, int32_t> joint_initial_positions = {
     {"left_knee", 180.0f},
     {"left_hip_pitch", 180.0f},
-    {"left_hip_roll", 180.0f},
+    {"left_hip_roll", 90.0f},
 
     {"left_elbow", 180.0f},
     {"left_shoulder_pitch", 180.0f},
-    {"left_shoulder_roll", 180.0f},
+    {"left_shoulder_roll", 90.0f},
 
     {"right_knee", 180.0f},
-    {"right_hip_roll", 180.0f},
+    {"right_hip_roll", 90.0f},
     {"right_hip_pitch", 180.0f},
 
     {"right_elbow", 180.0f},
     {"right_shoulder_pitch", 180.0f},
-    {"right_shoulder_roll", 180.0f},
+    {"right_shoulder_roll", 90.0f},
 };
 
 // Update sw_data with the goal positions from the ROS message
@@ -548,6 +548,44 @@ void setup()
   sync_read_app_setup(&bus4);
 
   ros_setup();
+
+  // Iterate through each joint and update its goal position
+  for (const auto &joint : joint_initial_positions)
+  {
+    auto it = joints_map.find(joint.first);
+    if (it != joints_map.end())
+    {
+      Joint *joint_ptr = it->second;
+      joint_ptr->goal_position_raw = degToRaw(joint.second);
+
+      // Update the corresponding SyncWrite data
+      DynamixelBusConfig_t *bus = joint_ptr->bus;
+
+      // Find the index of this joint's ID in the bus's id_list
+      int index = -1;
+      for (size_t i = 0; i < bus->id_count; i++)
+      {
+        if (bus->id_list[i] == joint_ptr->id)
+        {
+          index = i;
+          break;
+        }
+      }
+
+      if (index != -1)
+      {
+        bus->sw_data[index].goal_position = joint_ptr->goal_position_raw;
+      }
+      else
+      {
+        DEBUG_PRINTF("Joint ID %d not found in bus's id_list.\n", joint_ptr->id);
+      }
+    }
+    else
+    {
+      DEBUG_PRINTF("Joint not found: %s\r\n", joint.first.c_str());
+    }
+  }
 }
 
 void loop()
