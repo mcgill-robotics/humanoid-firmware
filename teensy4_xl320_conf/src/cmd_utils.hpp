@@ -11,7 +11,7 @@ float map_float(float x, float in_min, float in_max, float out_min, float out_ma
   return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 }
 
-float raw2deg(float raw)
+float raw2deg(int32_t raw)
 {
   // return map_float(raw, 0, 1023, 0, 300);
   return map_float(raw, RAW_MIN, RAW_MAX, DEG_MIN, DEG_MAX);
