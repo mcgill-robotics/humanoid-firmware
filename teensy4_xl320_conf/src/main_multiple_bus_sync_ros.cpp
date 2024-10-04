@@ -159,7 +159,13 @@ class Joint
 public:
   // Constructor
   Joint(const std::string &name, uint8_t id, DynamixelBusConfig_t *bus)
-      : name(name), id(id), goal_position_raw(2048), current_position_raw(INT32_MIN), bus(bus) {}
+      : name(name), id(id), goal_position_raw(2048), current_position_raw(INT32_MIN), bus(bus)
+  {
+    // Initialize feedback to zero
+    feedback[0] = 0.0f;
+    feedback[1] = 0.0f;
+    feedback[2] = 0.0f;
+  }
 
   // Members
   std::string name;
@@ -167,6 +173,9 @@ public:
   int32_t goal_position_raw;
   int32_t current_position_raw;
   DynamixelBusConfig_t *bus; // Pointer to the associated bus
+
+  // Persistent feedback storage
+  float feedback[3];
 };
 
 static int32_t degToRaw(float degrees)
@@ -454,6 +463,7 @@ void ros_setup()
     DEBUG_PRINTF("Waiting for ROS connection...\r\n"); // Debugging line
   }
 
+  // Setup length of float arrays in the message
   servo_fb_msg.right_shoulder_pitch_length = 3;
   servo_fb_msg.right_shoulder_roll_length = 3;
   servo_fb_msg.right_elbow_length = 3;
@@ -466,6 +476,20 @@ void ros_setup()
   servo_fb_msg.right_hip_roll_length = 3;
   servo_fb_msg.right_hip_pitch_length = 3;
   servo_fb_msg.right_knee_length = 3;
+
+  // Setup pointers to the feedback arrays
+  servo_fb_msg.right_shoulder_pitch = right_shoulder_pitch.feedback;
+  servo_fb_msg.right_shoulder_roll = right_shoulder_roll.feedback;
+  servo_fb_msg.right_elbow = right_elbow.feedback;
+  servo_fb_msg.left_shoulder_pitch = left_shoulder_pitch.feedback;
+  servo_fb_msg.left_shoulder_roll = left_shoulder_roll.feedback;
+  servo_fb_msg.left_elbow = left_elbow.feedback;
+  servo_fb_msg.left_hip_roll = left_hip_roll.feedback;
+  servo_fb_msg.left_hip_pitch = left_hip_pitch.feedback;
+  servo_fb_msg.left_knee = left_knee.feedback;
+  servo_fb_msg.right_hip_roll = right_hip_roll.feedback;
+  servo_fb_msg.right_hip_pitch = right_hip_pitch.feedback;
+  servo_fb_msg.right_knee = right_knee.feedback;
 
   DEBUG_PRINTF("%s() end\r\n", __func__);
 }
@@ -485,6 +509,7 @@ void process_bus_feedback(DynamixelBusConfig_t *bus_config)
 
       Joint *joint_ptr = joints_map[joint_name];
       joint_ptr->current_position_raw = bus_config->sr_data[i].present_position;
+      float current_position_deg = rawToDeg(bus_config->sr_data[i].present_position);
 
       // DEBUG_PRINTF("joint_name=%s, bus_config->sr_data[i].present_position %d\r\n", joint_name, bus_config->sr_data[i].present_position);
       DEBUG_PRINTF("joint_name=%s, present_position=%d\r\n",
@@ -492,102 +517,15 @@ void process_bus_feedback(DynamixelBusConfig_t *bus_config)
 
       float feedback[3] = {
           // static_cast<float>(bus_config->sr_data[i].present_position),
-          static_cast<float>(raw2deg(bus_config->sr_data[i].present_position)),
+          static_cast<float>(current_position_deg),
           static_cast<float>(0.0),
           static_cast<float>(0.0),
       };
 
-      // Map the feedback to the corresponding message fields
-      // if (joint_name == "right_shoulder_pitch")
-      //   servo_fb_msg.right_shoulder_pitch = feedback;
-      // else if (joint_name == "right_shoulder_roll")
-      //   servo_fb_msg.right_shoulder_roll = feedback;
-      // else if (joint_name == "right_elbow")
-      //   servo_fb_msg.right_elbow = feedback;
-      // else if (joint_name == "left_shoulder_pitch")
-      //   servo_fb_msg.left_shoulder_pitch = feedback;
-      // else if (joint_name == "left_shoulder_roll")
-      //   servo_fb_msg.left_shoulder_roll = feedback;
-      // else if (joint_name == "left_elbow")
-      //   servo_fb_msg.left_elbow = feedback;
-      // else if (joint_name == "left_hip_roll")
-      //   servo_fb_msg.left_hip_roll = feedback;
-      // else if (joint_name == "left_hip_pitch")
-      //   servo_fb_msg.left_hip_pitch = feedback;
-      // else if (joint_name == "left_knee")
-      //   servo_fb_msg.left_knee = feedback;
-      // else if (joint_name == "right_hip_roll")
-      //   servo_fb_msg.right_hip_roll = feedback;
-      // else if (joint_name == "right_hip_pitch")
-      //   servo_fb_msg.right_hip_pitch = feedback;
-      // else if (joint_name == "right_knee")
-      //   servo_fb_msg.right_knee = feedback;
-
-      // Map the feedback to the corresponding message fields
-      if (joint_name == "right_shoulder_pitch")
-      {
-        memcpy(servo_fb_msg.right_shoulder_pitch, feedback, sizeof(feedback));
-        DEBUG_PRINTF("Matched joint_name: %s\r\n", joint_name.c_str());
-      }
-      else if (joint_name == "right_shoulder_roll")
-      {
-        memcpy(servo_fb_msg.right_shoulder_roll, feedback, sizeof(feedback));
-        DEBUG_PRINTF("Matched joint_name: %s\r\n", joint_name.c_str());
-      }
-      else if (joint_name == "right_elbow")
-      {
-        memcpy(servo_fb_msg.right_elbow, feedback, sizeof(feedback));
-        DEBUG_PRINTF("Matched joint_name: %s\r\n", joint_name.c_str());
-      }
-      else if (joint_name == "left_shoulder_pitch")
-      {
-        memcpy(servo_fb_msg.left_shoulder_pitch, feedback, sizeof(feedback));
-        DEBUG_PRINTF("Matched joint_name: %s\r\n", joint_name.c_str());
-      }
-      else if (joint_name == "left_shoulder_roll")
-      {
-        memcpy(servo_fb_msg.left_shoulder_roll, feedback, sizeof(feedback));
-        DEBUG_PRINTF("Matched joint_name: %s\r\n", joint_name.c_str());
-      }
-      else if (joint_name == "left_elbow")
-      {
-        memcpy(servo_fb_msg.left_elbow, feedback, sizeof(feedback));
-        DEBUG_PRINTF("Matched joint_name: %s\r\n", joint_name.c_str());
-      }
-      else if (joint_name == "left_hip_roll")
-      {
-        memcpy(servo_fb_msg.left_hip_roll, feedback, sizeof(feedback));
-        DEBUG_PRINTF("Matched joint_name: %s\r\n", joint_name.c_str());
-      }
-      else if (joint_name == "left_hip_pitch")
-      {
-        memcpy(servo_fb_msg.left_hip_pitch, feedback, sizeof(feedback));
-        DEBUG_PRINTF("Matched joint_name: %s\r\n", joint_name.c_str());
-      }
-      else if (joint_name == "left_knee")
-      {
-        memcpy(servo_fb_msg.left_knee, feedback, sizeof(feedback));
-        DEBUG_PRINTF("Matched joint_name: %s\r\n", joint_name.c_str());
-      }
-      else if (joint_name == "right_hip_roll")
-      {
-        memcpy(servo_fb_msg.right_hip_roll, feedback, sizeof(feedback));
-        DEBUG_PRINTF("Matched joint_name: %s\r\n", joint_name.c_str());
-      }
-      else if (joint_name == "right_hip_pitch")
-      {
-        memcpy(servo_fb_msg.right_hip_pitch, feedback, sizeof(feedback));
-        DEBUG_PRINTF("Matched joint_name: %s\r\n", joint_name.c_str());
-      }
-      else if (joint_name == "right_knee")
-      {
-        memcpy(servo_fb_msg.right_knee, feedback, sizeof(feedback));
-        DEBUG_PRINTF("Matched joint_name: %s\r\n", joint_name.c_str());
-      }
-      else
-      {
-        DEBUG_PRINTF("No match found for joint_name: '%s'\n", joint_name.c_str());
-      }
+      // Assign feedback directly to the joint's feedback array
+      joint_ptr->feedback[0] = current_position_deg;
+      joint_ptr->feedback[1] = 0.0f; // Placeholder for additional data
+      joint_ptr->feedback[2] = 0.0f; // Placeholder for additional data
     }
     else
     {
