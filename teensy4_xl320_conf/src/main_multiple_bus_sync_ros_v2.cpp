@@ -62,25 +62,6 @@ typedef struct sw_data
   int32_t goal_position;
 } __attribute__((packed)) sw_data_t;
 
-// Map of joint names to their initial positions
-std::unordered_map<std::string, float> joint_initial_positions = {
-    {"left_knee", 180.0f},
-    {"left_hip_roll", 90.0f},
-    {"left_hip_pitch", 180.0f},
-
-    {"left_elbow", 180.0f},
-    {"left_shoulder_roll", 90.0f},
-    {"left_shoulder_pitch", 180.0f},
-
-    {"right_knee", 180.0f},
-    {"right_hip_roll", 90.0f},
-    {"right_hip_pitch", 180.0f},
-
-    {"right_elbow", 180.0f},
-    {"right_shoulder_roll", 90.0f},
-    {"right_shoulder_pitch", 180.0f},
-};
-
 // Function to convert degrees to raw position
 static int32_t degToRaw(float degrees)
 {
@@ -101,14 +82,60 @@ class DynamixelBus;
 std::unordered_map<std::string, std::shared_ptr<Joint>> joints_map;
 std::unordered_map<uint8_t, std::string> joint_id_to_name;
 
+// ------------------ Configuration Structures ------------------
+
+struct JointConfig
+{
+  std::string name;
+  uint8_t id;
+  uint8_t bus_number; // 1-based bus number
+  float initial_position_deg;
+};
+
+struct BusConfig
+{
+  uint8_t bus_number; // 1-based bus number
+  HardwareSerial &serial_port;
+};
+
+// ------------------ Configuration Data ------------------
+
+// List of bus configurations
+std::vector<BusConfig> bus_configs = {
+    {1, Serial1},
+    {2, Serial2},
+    {3, Serial3},
+    {4, Serial4},
+};
+
+// List of joint configurations
+std::vector<JointConfig> joint_configs = {
+    {"left_knee", 11, 1, 180.0f},
+    {"left_hip_roll", 12, 1, 90.0f},
+    {"left_hip_pitch", 13, 1, 180.0f},
+
+    {"left_elbow", 14, 2, 180.0f},
+    {"left_shoulder_roll", 15, 2, 90.0f},
+    {"left_shoulder_pitch", 16, 2, 180.0f},
+
+    {"right_knee", 21, 3, 180.0f},
+    {"right_hip_roll", 22, 3, 90.0f},
+    {"right_hip_pitch", 23, 3, 180.0f},
+
+    {"right_elbow", 24, 4, 180.0f},
+    {"right_shoulder_roll", 25, 4, 90.0f},
+    {"right_shoulder_pitch", 26, 4, 180.0f},
+};
+
 // ------------------ Class Definitions ------------------
 
 class Joint
 {
 public:
   // Constructor
-  Joint(const std::string &name, uint8_t id, DynamixelBus *bus)
-      : name(name), id(id), goal_position_raw(2048), current_position_raw(INT32_MIN), bus(bus)
+  Joint(const JointConfig &cfg)
+      : name(cfg.name), id(cfg.id), bus_number(cfg.bus_number),
+        goal_position_raw(degToRaw(cfg.initial_position_deg)), current_position_raw(INT32_MIN)
   {
     feedback.resize(3, 0.0f);
   }
@@ -118,9 +145,9 @@ public:
 
   std::string name;
   uint8_t id;
+  uint8_t bus_number;
   int32_t goal_position_raw;
   int32_t current_position_raw;
-  DynamixelBus *bus;
   std::vector<float> feedback;
 };
 
@@ -129,10 +156,9 @@ class DynamixelBus
 public:
   static constexpr uint16_t user_pkt_buf_cap = 128;
 
-  DynamixelBus(HardwareSerial &serial, int dir_pin, const std::vector<uint8_t> &ids)
-      : dxl(serial, dir_pin), id_list(ids)
+  DynamixelBus(const BusConfig &bus_cfg)
+      : bus_number(bus_cfg.bus_number), dxl(bus_cfg.serial_port, DXL_DIR_PIN)
   {
-    id_count = ids.size();
     user_pkt_buf.resize(user_pkt_buf_cap, 0);
   }
 
@@ -141,10 +167,16 @@ public:
   void updateGoalPosition(uint8_t id, int32_t position_raw);
   void processFeedback();
 
+  void addJoint(std::shared_ptr<Joint> joint);
+
   // Members
+  uint8_t bus_number;
   Dynamixel2Arduino dxl;
   std::vector<uint8_t> id_list;
   size_t id_count;
+
+  // Joints managed by this bus
+  std::vector<std::shared_ptr<Joint>> joints;
 
   // SyncRead related data
   std::vector<sr_data_t> sr_data;
@@ -159,12 +191,28 @@ public:
   std::vector<uint8_t> user_pkt_buf;
 };
 
+// ------------------ Global Variables ------------------
+
+// Map of bus number to DynamixelBus instance
+std::unordered_map<uint8_t, std::shared_ptr<DynamixelBus>> bus_map;
+
+// Vector of buses for easy iteration
+std::vector<std::shared_ptr<DynamixelBus>> buses;
+
 // ------------------ Function Implementations ------------------
 
 void Joint::updateGoalPosition(float degrees)
 {
   goal_position_raw = degToRaw(degrees);
-  bus->updateGoalPosition(id, goal_position_raw);
+  auto bus_it = bus_map.find(bus_number);
+  if (bus_it != bus_map.end())
+  {
+    bus_it->second->updateGoalPosition(id, goal_position_raw);
+  }
+  else
+  {
+    DEBUG_PRINTF("Bus number %d not found for joint %s\n", bus_number, name.c_str());
+  }
 }
 
 void Joint::updateFeedback(int32_t raw_position)
@@ -175,9 +223,17 @@ void Joint::updateFeedback(int32_t raw_position)
   feedback[2] = 0.0f; // Placeholder for additional data
 }
 
+void DynamixelBus::addJoint(std::shared_ptr<Joint> joint)
+{
+  joints.push_back(joint);
+  id_list.push_back(joint->id);
+}
+
 void DynamixelBus::setup()
 {
   pinMode(LED_BUILTIN, OUTPUT);
+
+  id_count = id_list.size();
 
   // Initialize the Dynamixel bus
   dxl.begin(57600);
@@ -191,7 +247,7 @@ void DynamixelBus::setup()
     dxl.torqueOn(id);
   }
 
-  // Prepare SyncRead and SyncWrite structures
+  // Allocate the vectors
   sr_data.resize(id_count);
   info_xels_sr.resize(id_count);
   sw_data.resize(id_count);
@@ -224,7 +280,9 @@ void DynamixelBus::setup()
 
     info_xels_sw[i].id = id_list[i];
     info_xels_sw[i].p_data = reinterpret_cast<uint8_t *>(&sw_data[i].goal_position);
-    sw_data[i].goal_position = 2048; // Initialize to center
+
+    // Set initial goal positions from joints
+    sw_data[i].goal_position = joints[i]->goal_position_raw;
   }
 }
 
@@ -320,62 +378,46 @@ void DynamixelBus::processFeedback()
   }
 }
 
-// Create instances of DynamixelBus
-DynamixelBus bus1(Serial1, DXL_DIR_PIN, {11, 12, 13});
-DynamixelBus bus2(Serial2, DXL_DIR_PIN, {14, 15, 16});
-DynamixelBus bus3(Serial3, DXL_DIR_PIN, {21, 22, 23});
-DynamixelBus bus4(Serial4, DXL_DIR_PIN, {24, 25, 26});
+// ------------------ Servo Setup Function ------------------
 
-// Vector of buses for easy iteration
-std::vector<DynamixelBus *> buses = {&bus1, &bus2, &bus3, &bus4};
-
-// Create joints and populate maps
 void servo_setup()
 {
-  // Bus 1 Joints
-  auto left_knee = std::make_shared<Joint>("left_knee", 11, &bus1);
-  auto left_hip_roll = std::make_shared<Joint>("left_hip_roll", 12, &bus1);
-  auto left_hip_pitch = std::make_shared<Joint>("left_hip_pitch", 13, &bus1);
-
-  // Bus 2 Joints
-  auto left_elbow = std::make_shared<Joint>("left_elbow", 14, &bus2);
-  auto left_shoulder_roll = std::make_shared<Joint>("left_shoulder_roll", 15, &bus2);
-  auto left_shoulder_pitch = std::make_shared<Joint>("left_shoulder_pitch", 16, &bus2);
-
-  // Bus 3 Joints
-  auto right_knee = std::make_shared<Joint>("right_knee", 21, &bus3);
-  auto right_hip_roll = std::make_shared<Joint>("right_hip_roll", 22, &bus3);
-  auto right_hip_pitch = std::make_shared<Joint>("right_hip_pitch", 23, &bus3);
-
-  // Bus 4 Joints
-  auto right_elbow = std::make_shared<Joint>("right_elbow", 24, &bus4);
-  auto right_shoulder_roll = std::make_shared<Joint>("right_shoulder_roll", 25, &bus4);
-  auto right_shoulder_pitch = std::make_shared<Joint>("right_shoulder_pitch", 26, &bus4);
-
-  // Add joints to map
-  std::vector<std::shared_ptr<Joint>> all_joints = {
-      left_knee, left_hip_roll, left_hip_pitch,
-      left_elbow, left_shoulder_roll, left_shoulder_pitch,
-      right_knee, right_hip_roll, right_hip_pitch,
-      right_elbow, right_shoulder_roll, right_shoulder_pitch};
-
-  for (auto &joint : all_joints)
+  // Create buses and add them to bus_map and buses vector
+  for (const auto &bus_cfg : bus_configs)
   {
-    joints_map[joint->name] = joint;
-    joint_id_to_name[joint->id] = joint->name;
+    auto bus = std::make_shared<DynamixelBus>(bus_cfg);
+    bus_map[bus_cfg.bus_number] = bus;
+    buses.push_back(bus);
   }
 
-  // Set initial joint positions
-  for (const auto &[name, degrees] : joint_initial_positions)
+  // Create joints and assign them to buses
+  for (const auto &joint_cfg : joint_configs)
   {
-    if (auto it = joints_map.find(name); it != joints_map.end())
+    auto joint = std::make_shared<Joint>(joint_cfg);
+    joints_map[joint->name] = joint;
+    joint_id_to_name[joint->id] = joint->name;
+
+    // Add joint to the appropriate bus
+    auto bus_it = bus_map.find(joint->bus_number);
+    if (bus_it != bus_map.end())
     {
-      it->second->updateGoalPosition(degrees);
+      bus_it->second->addJoint(joint);
     }
+    else
+    {
+      DEBUG_PRINTF("Bus number %d not found for joint %s\n", joint->bus_number, joint->name.c_str());
+    }
+  }
+
+  // Setup each bus
+  for (auto &bus : buses)
+  {
+    bus->setup();
   }
 }
 
-// ROS Callback function
+// ------------------ ROS Callback ------------------
+
 void servo_cmd_cb(const humanoid_msgs::ServoCommand &input_msg)
 {
   DEBUG_PRINTF("%s() start\r\n", __func__);
@@ -411,7 +453,8 @@ void servo_cmd_cb(const humanoid_msgs::ServoCommand &input_msg)
   DEBUG_PRINTF("%s() end\r\n", __func__);
 }
 
-// ROS Setup function
+// ------------------ ROS Setup Function ------------------
+
 void ros_setup()
 {
   DEBUG_PRINTF("%s() start\r\n", __func__);
@@ -458,18 +501,20 @@ void ros_setup()
   DEBUG_PRINTF("%s() end\r\n", __func__);
 }
 
-// ROS Loop function
+// ------------------ ROS Loop Function ------------------
+
 void ros_loop()
 {
   nh.spinOnce();
-  for (auto bus : buses)
+  for (auto &bus : buses)
   {
     bus->processFeedback();
   }
   servo_fb_pub.publish(&servo_fb_msg);
 }
 
-// Setup function
+// ------------------ Setup Function ------------------
+
 void setup()
 {
   DEBUG_SERIAL.begin(115200);
@@ -480,18 +525,14 @@ void setup()
 
   servo_setup();
 
-  for (auto bus : buses)
-  {
-    bus->setup();
-  }
-
   ros_setup();
 }
 
-// Main loop function
+// ------------------ Main Loop Function ------------------
+
 void loop()
 {
-  for (auto bus : buses)
+  for (auto &bus : buses)
   {
     bus->loop();
   }
