@@ -379,7 +379,6 @@ void DynamixelBus::processFeedback()
 }
 
 // ------------------ Servo Setup Function ------------------
-
 void servo_setup()
 {
   // Create buses and add them to bus_map and buses vector
