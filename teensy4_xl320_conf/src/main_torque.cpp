@@ -1,5 +1,5 @@
 #include "common.h"
-#if COMPILE_CFG == -1
+#if COMPILE_CFG == 1
 
 #include <Arduino.h>
 #include "cmd_utils.hpp"
@@ -46,10 +46,13 @@ const int DXL_DIR_PIN = -1; // DYNAMIXEL Shield DIR PIN
 const uint8_t BROADCAST_ID = 0xFE;
 const float DXL_PROTOCOL_VERSION = 2.0;
 
-const uint16_t SR_START_ADDR = 132;
+const uint16_t SR_START_ADDR_POSITION = 132;
+const uint16_t SR_START_ADDR_VELOCITY = 128;
 const uint16_t SR_ADDR_LEN = 4;
-const uint16_t SW_START_ADDR = 116;
-const uint16_t SW_ADDR_LEN = 4;
+const uint16_t GOAL_POSITION_ADDR = 116;
+const uint16_t GOAL_PWM_ADDR = 100;
+const uint16_t GOAL_POSITION_LEN = 4;
+const uint16_t GOAL_PWM_LEN = 2;
 
 // Structures for SyncRead and SyncWrite data
 typedef struct sr_data
@@ -135,19 +138,22 @@ public:
   // Constructor
   Joint(const JointConfig &cfg)
       : name(cfg.name), id(cfg.id), bus_number(cfg.bus_number),
-        goal_position_raw(degToRaw(cfg.initial_position_deg)), current_position_raw(INT32_MIN)
+        goal_position_raw(degToRaw(cfg.initial_position_deg)), present_position_raw(INT32_MIN)
   {
     feedback.resize(3, 0.0f);
   }
 
   void updateGoalPosition(float degrees);
-  void updateFeedback(int32_t raw_position);
+  void update_present_position(int32_t raw_position);
+  void update_present_velocity(int32_t raw_velocity);
 
   std::string name;
   uint8_t id;
   uint8_t bus_number;
   int32_t goal_position_raw;
-  int32_t current_position_raw;
+  int32_t present_position_raw;
+  int32_t present_velocity_raw;
+  int32_t present_load_raw;
   std::vector<float> feedback;
 };
 
@@ -163,7 +169,7 @@ public:
   }
 
   void setup();
-  void loop();
+  void tick();
   void updateGoalPosition(uint8_t id, int32_t position_raw);
   void processFeedback();
 
@@ -203,7 +209,7 @@ std::vector<std::shared_ptr<DynamixelBus>> buses;
 
 void Joint::updateGoalPosition(float degrees)
 {
-  goal_position_raw = degToRaw(degrees);
+  // goal_position_raw = degToRaw(degrees);
   auto bus_it = bus_map.find(bus_number);
   if (bus_it != bus_map.end())
   {
@@ -215,12 +221,16 @@ void Joint::updateGoalPosition(float degrees)
   }
 }
 
-void Joint::updateFeedback(int32_t raw_position)
+void Joint::update_present_position(int32_t raw_position)
 {
-  current_position_raw = raw_position;
+  present_position_raw = raw_position;
   feedback[0] = rawToDeg(raw_position);
-  feedback[1] = 0.0f; // Placeholder for additional data
-  feedback[2] = 0.0f; // Placeholder for additional data
+}
+
+void Joint::update_present_velocity(int32_t raw_velocity)
+{
+  present_velocity_raw = raw_velocity;
+  feedback[1] = raw_velocity;
 }
 
 void DynamixelBus::addJoint(std::shared_ptr<Joint> joint)
@@ -257,7 +267,7 @@ void DynamixelBus::setup()
   sr_infos.packet.p_buf = user_pkt_buf.data();
   sr_infos.packet.buf_capacity = user_pkt_buf_cap;
   sr_infos.packet.is_completed = false;
-  sr_infos.addr = SR_START_ADDR;
+  sr_infos.addr = SR_START_ADDR_POSITION;
   sr_infos.addr_length = SR_ADDR_LEN;
   sr_infos.p_xels = info_xels_sr.data();
   sr_infos.xel_count = id_count;
@@ -266,8 +276,10 @@ void DynamixelBus::setup()
   // Fill SyncWrite info
   sw_infos.packet.p_buf = nullptr;
   sw_infos.packet.is_completed = false;
-  sw_infos.addr = SW_START_ADDR;
-  sw_infos.addr_length = SW_ADDR_LEN;
+
+  sw_infos.addr = GOAL_POSITION_ADDR;
+  sw_infos.addr_length = GOAL_POSITION_LEN;
+
   sw_infos.p_xels = info_xels_sw.data();
   sw_infos.xel_count = id_count;
   sw_infos.is_info_changed = true;
@@ -284,17 +296,8 @@ void DynamixelBus::setup()
     // Set initial goal positions from joints
     sw_data[i].goal_position = joints[i]->goal_position_raw;
   }
-}
 
-void DynamixelBus::loop()
-{
-  static uint32_t try_count = 0;
-  uint8_t recv_cnt;
-
-  DEBUG_PRINT("\n>>>>>> Sync Instruction Test : ");
-  DEBUG_PRINTLN(try_count++);
-
-  // Build a SyncWrite Packet and transmit to DYNAMIXEL
+  // Go to initial positions
   if (dxl.syncWrite(&sw_infos))
   {
     DEBUG_PRINTLN("[SyncWrite] Success");
@@ -317,7 +320,54 @@ void DynamixelBus::loop()
   }
   DEBUG_PRINTLN();
 
-  // Transmit predefined SyncRead instruction packet
+  delay(1000);
+
+  // Change to PWM mode
+  for (auto id : id_list)
+  {
+    dxl.torqueOff(id);
+    dxl.setOperatingMode(id, OP_PWM);
+    dxl.torqueOn(id);
+  }
+}
+
+void DynamixelBus::tick()
+{
+  static uint32_t try_count = 0;
+  uint8_t recv_cnt;
+
+  DEBUG_PRINT("\n>>>>>> Sync Instruction Test : ");
+  DEBUG_PRINTLN(try_count++);
+
+  // Build a SyncWrite Packet and transmit to DYNAMIXEL
+  sw_infos.addr = GOAL_PWM_ADDR;
+  sw_infos.addr_length = GOAL_PWM_LEN;
+  sw_infos.is_info_changed = true;
+  if (dxl.syncWrite(&sw_infos))
+  {
+    DEBUG_PRINTLN("[SyncWrite] Success");
+    for (size_t i = 0; i < sw_infos.xel_count; i++)
+    {
+      uint8_t id = info_xels_sw[i].id;
+      auto joint_name_it = joint_id_to_name.find(id);
+      std::string joint_name = (joint_name_it != joint_id_to_name.end()) ? joint_name_it->second : "Unknown";
+
+      DEBUG_PRINTF("\tID=%d, name=%s\r\n", id, joint_name.c_str());
+      DEBUG_PRINTF("\t\tgoal_position_raw=%d, goal_position_deg=%f\r\n",
+                   sw_data[i].goal_position,
+                   rawToDeg(sw_data[i].goal_position));
+    }
+  }
+  else
+  {
+    DEBUG_PRINT("[SyncWrite] Fail, Lib error code: ");
+    DEBUG_PRINT(dxl.getLastLibErrCode());
+  }
+  DEBUG_PRINTLN();
+
+  // SyncRead Position
+  sr_infos.addr = SR_START_ADDR_POSITION;
+  sr_infos.is_info_changed = true;
   recv_cnt = dxl.syncRead(&sr_infos);
   if (recv_cnt > 0)
   {
@@ -328,6 +378,9 @@ void DynamixelBus::loop()
       uint8_t id = info_xels_sr[i].id;
       auto joint_name_it = joint_id_to_name.find(id);
       std::string joint_name = (joint_name_it != joint_id_to_name.end()) ? joint_name_it->second : "Unknown";
+
+      auto joint = joints_map[joint_name_it->second];
+      joint->update_present_position(sr_data[i].present_position);
 
       DEBUG_PRINTF("\tID=%d, name=%s\r\n", id, joint_name.c_str());
       DEBUG_PRINTF("\t\tpresent_position_raw=%d, present_position_deg=%f\r\n",
@@ -340,6 +393,35 @@ void DynamixelBus::loop()
     DEBUG_PRINT("[SyncRead] Fail, Lib error code: ");
     DEBUG_PRINTLN(dxl.getLastLibErrCode());
   }
+
+  // SyncRead Velocity
+  // sr_infos.addr = SR_START_ADDR_VELOCITY;
+  // sr_infos.is_info_changed = true;
+  // recv_cnt = dxl.syncRead(&sr_infos);
+  // if (recv_cnt > 0)
+  // {
+  //   DEBUG_PRINT("[SyncRead] Success, Received ID Count: ");
+  //   DEBUG_PRINTLN(recv_cnt);
+  //   for (size_t i = 0; i < recv_cnt; i++)
+  //   {
+  //     uint8_t id = info_xels_sr[i].id;
+  //     auto joint_name_it = joint_id_to_name.find(id);
+  //     std::string joint_name = (joint_name_it != joint_id_to_name.end()) ? joint_name_it->second : "Unknown";
+
+  //     auto joint = joints_map[joint_name_it->second];
+  //     joint->update_present_velocity(sr_data[i].present_position);
+
+  //     DEBUG_PRINTF("\tID=%d, name=%s\r\n", id, joint_name.c_str());
+  //     DEBUG_PRINTF("\t\tpresent_velocity_raw=%d\r\n",
+  //                  sr_data[i].present_position);
+  //   }
+  // }
+  // else
+  // {
+  //   DEBUG_PRINT("[SyncRead] Fail, Lib error code: ");
+  //   DEBUG_PRINTLN(dxl.getLastLibErrCode());
+  // }
+
   DEBUG_PRINTLN("=======================================================");
 
   digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
@@ -369,7 +451,7 @@ void DynamixelBus::processFeedback()
     if (joint_name_it != joint_id_to_name.end())
     {
       auto joint = joints_map[joint_name_it->second];
-      joint->updateFeedback(sr_data[i].present_position);
+      joint->update_present_position(sr_data[i].present_position);
     }
     else
     {
@@ -500,41 +582,39 @@ void ros_setup()
   DEBUG_PRINTF("%s() end\r\n", __func__);
 }
 
-// ------------------ ROS Loop Function ------------------
-
-void ros_loop()
+void servo_loop()
 {
-  nh.spinOnce();
+  for (auto &bus : buses)
+  {
+    bus->tick();
+  }
   for (auto &bus : buses)
   {
     bus->processFeedback();
   }
-  servo_fb_pub.publish(&servo_fb_msg);
 }
 
-// ------------------ Setup Function ------------------
+void ros_loop()
+{
+  nh.spinOnce();
+
+  servo_fb_pub.publish(&servo_fb_msg);
+}
 
 void setup()
 {
   DEBUG_SERIAL.begin(115200);
   while (!DEBUG_SERIAL)
     ;
-
   DEBUG_PRINTF("Multiple bus sync read write app\n");
 
   servo_setup();
-
   ros_setup();
 }
 
-// ------------------ Main Loop Function ------------------
-
 void loop()
 {
-  for (auto &bus : buses)
-  {
-    bus->loop();
-  }
+  servo_loop();
   ros_loop();
 }
 
