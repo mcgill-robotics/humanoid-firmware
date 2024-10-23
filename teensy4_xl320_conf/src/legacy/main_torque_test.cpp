@@ -40,6 +40,7 @@ float present_position = 0;
 float present_velocity = 0;
 float present_pwm = 0;
 float present_current = 0;
+float present_load = 0;
 
 float desired_position = 0;
 float desired_pwm = 0;
@@ -102,12 +103,13 @@ void process_serial_cmd()
     }
     else if (inChar == 'r')
     {
+      desired_position = 2048;
       DEBUG_SERIAL.println("resetting");
       dxl.torqueOff(DXL_ID);
       dxl.setOperatingMode(DXL_ID, OP_POSITION);
       dxl.torqueOn(DXL_ID);
       op_mode = OP_POSITION;
-      dxl.setGoalPosition(DXL_ID, 2048);
+      dxl.setGoalPosition(DXL_ID, desired_position);
     }
     else
     {
@@ -127,7 +129,7 @@ void setup()
   dxl.begin(57600);
   // Set Port Protocol Version. This has to match with DYNAMIXEL protocol version.
   dxl.setPortProtocolVersion(DXL_PROTOCOL_VERSION);
-  // Get DYNAMIXEL information
+  // Get DYNAMIXEL information, detects servo model number
   dxl.ping(DXL_ID);
 
   // Turn off torque when configuring items in EEPROM area
@@ -137,6 +139,10 @@ void setup()
   dxl.torqueOn(DXL_ID);
 
   last_time = millis();
+}
+
+void servo_loop()
+{
 }
 
 void loop()
@@ -161,6 +167,7 @@ void loop()
     present_velocity = dxl.getPresentVelocity(DXL_ID, UNIT_RAW);
     present_current = dxl.getPresentCurrent(DXL_ID, UNIT_RAW);
     present_pwm = dxl.getPresentPWM(DXL_ID, UNIT_RAW);
+    present_load = dxl.readControlTableItem(PRESENT_LOAD, DXL_ID);
 
     last_time = millis();
     DEBUG_SERIAL.println("=======================================================");
@@ -169,6 +176,7 @@ void loop()
     DEBUG_SERIAL.printf("desired_position=%f, present_position=%f\r\n", desired_position, present_position);
     DEBUG_SERIAL.printf("desired_pwm=%f, present_pwm=%f\r\n", desired_pwm, present_pwm);
     DEBUG_SERIAL.printf("present_velocity=%f\r\n", present_velocity);
+    DEBUG_SERIAL.printf("present_load=%f\r\n", present_load);
     DEBUG_SERIAL.printf("present_current=%f\r\n", present_current);
   }
 }
