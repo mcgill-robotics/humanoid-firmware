@@ -1,5 +1,5 @@
 #include "common.h"
-#if COMPILE_CFG == -1
+#if COMPILE_CFG == 1
 
 #include <Arduino.h>
 #include "cmd_utils.hpp"
@@ -57,7 +57,7 @@ const uint16_t GOAL_PWM_LEN = 2;
 // Structures for SyncRead and SyncWrite data
 typedef struct sr_data
 {
-  int32_t present_position;
+  int32_t raw_data;
 } __attribute__((packed)) sr_data_t;
 
 typedef struct sw_data
@@ -65,13 +65,13 @@ typedef struct sw_data
   int32_t goal_position;
 } __attribute__((packed)) sw_data_t;
 
-// Function to convert degrees to raw position
+// Function to convert degrees to raw goal
 static int32_t degToRaw(float degrees)
 {
   return static_cast<int32_t>(degrees * (4095.0 / 360.0));
 }
 
-// Function to convert raw position to degrees
+// Function to convert raw goal to degrees
 static float rawToDeg(int32_t raw)
 {
   return static_cast<float>(raw) * (360.0 / 4095.0);
@@ -82,8 +82,9 @@ class Joint;
 class DynamixelBus;
 
 // Map of joints
-std::unordered_map<std::string, std::shared_ptr<Joint>> joints_map;
 std::unordered_map<uint8_t, std::string> joint_id_to_name;
+std::unordered_map<uint8_t, std::shared_ptr<Joint>> joint_id_to_joint;
+std::unordered_map<std::string, std::shared_ptr<Joint>> joint_name_to_joint;
 
 // ------------------ Configuration Structures ------------------
 
@@ -138,23 +139,25 @@ public:
   // Constructor
   Joint(const JointConfig &cfg)
       : name(cfg.name), id(cfg.id), bus_number(cfg.bus_number),
-        goal_position_raw(degToRaw(cfg.initial_position_deg)), present_position_raw(INT32_MIN)
+        goal_raw(degToRaw(cfg.initial_position_deg)), present_position_raw(INT32_MIN)
   {
     feedback.resize(3, 0.0f);
   }
 
-  void updateGoalPosition(float degrees);
+  void updateGoalPosition(float raw_data);
   void update_present_position(int32_t raw_position);
   void update_present_velocity(int32_t raw_velocity);
+  void update_present_load(int32_t raw_load);
 
   std::string name;
   uint8_t id;
   uint8_t bus_number;
-  int32_t goal_position_raw;
+  int32_t goal_raw;
   int32_t present_position_raw;
   int32_t present_velocity_raw;
   int32_t present_load_raw;
   std::vector<float> feedback;
+  int operating_mode = OP_POSITION;
 };
 
 class DynamixelBus
@@ -207,13 +210,13 @@ std::vector<std::shared_ptr<DynamixelBus>> buses;
 
 // ------------------ Function Implementations ------------------
 
-void Joint::updateGoalPosition(float degrees)
+void Joint::updateGoalPosition(float raw_data)
 {
-  // goal_position_raw = degToRaw(degrees);
+  goal_raw = degToRaw(raw_data);
   auto bus_it = bus_map.find(bus_number);
   if (bus_it != bus_map.end())
   {
-    bus_it->second->updateGoalPosition(id, goal_position_raw);
+    bus_it->second->updateGoalPosition(id, goal_raw);
   }
   else
   {
@@ -231,6 +234,12 @@ void Joint::update_present_velocity(int32_t raw_velocity)
 {
   present_velocity_raw = raw_velocity;
   feedback[1] = raw_velocity;
+}
+
+void Joint::update_present_load(int32_t raw_load)
+{
+  present_load_raw = raw_load;
+  feedback[2] = raw_load;
 }
 
 void DynamixelBus::addJoint(std::shared_ptr<Joint> joint)
@@ -255,6 +264,8 @@ void DynamixelBus::setup()
     dxl.torqueOff(id);
     dxl.setOperatingMode(id, OP_POSITION);
     dxl.torqueOn(id);
+    auto joint = joint_name_to_joint[joint_id_to_name[id]];
+    joint->operating_mode = OP_POSITION;
   }
 
   // Allocate the vectors
@@ -294,7 +305,7 @@ void DynamixelBus::setup()
     info_xels_sw[i].p_data = reinterpret_cast<uint8_t *>(&sw_data[i].goal_position);
 
     // Set initial goal positions from joints
-    sw_data[i].goal_position = joints[i]->goal_position_raw;
+    sw_data[i].goal_position = joints[i]->goal_raw;
   }
 
   // Go to initial positions
@@ -319,15 +330,62 @@ void DynamixelBus::setup()
     DEBUG_PRINT(dxl.getLastLibErrCode());
   }
   DEBUG_PRINTLN();
+}
 
-  delay(1000);
-
-  // Change to PWM mode
-  for (auto id : id_list)
+void switch_mode(int operating_mode)
+{
+  for (auto &bus : buses)
   {
-    dxl.torqueOff(id);
-    dxl.setOperatingMode(id, OP_PWM);
-    dxl.torqueOn(id);
+    for (auto &joint : bus->joints)
+    {
+      joint->operating_mode = operating_mode;
+      bus->dxl.torqueOff(joint->id);
+      bus->dxl.setOperatingMode(joint->id, operating_mode);
+      bus->dxl.torqueOn(joint->id);
+    }
+    if (operating_mode == OP_POSITION)
+    {
+      bus->sw_infos.addr = GOAL_POSITION_ADDR;
+      bus->sw_infos.addr_length = GOAL_POSITION_LEN;
+      bus->sw_infos.is_info_changed = true;
+    }
+    else if (operating_mode == OP_PWM)
+    {
+      bus->sw_infos.addr = GOAL_PWM_ADDR;
+      bus->sw_infos.addr_length = GOAL_PWM_LEN;
+      bus->sw_infos.is_info_changed = true;
+    }
+    else
+    {
+      DEBUG_PRINTLN("Invalid operating mode");
+      return;
+    }
+  }
+}
+
+void process_serial_cmd()
+{
+  static String inputString = "";
+
+  while (DEBUG_SERIAL.available())
+  {
+    char inChar = (char)DEBUG_SERIAL.read(); // Read each character
+    DEBUG_SERIAL.printf("Received: %c\r\n", inChar);
+    // Process the completed command
+    if (inChar == 'p')
+    {
+      DEBUG_PRINTLN("Switching to Position mode");
+      switch_mode(OP_POSITION);
+    }
+    else if (inChar == 't')
+    {
+      DEBUG_PRINTLN("Switching to PWM mode");
+      switch_mode(OP_PWM);
+    }
+    else
+    {
+      DEBUG_SERIAL.println("Unknown command");
+    }
   }
 }
 
@@ -340,9 +398,6 @@ void DynamixelBus::tick()
   DEBUG_PRINTLN(try_count++);
 
   // Build a SyncWrite Packet and transmit to DYNAMIXEL
-  sw_infos.addr = GOAL_PWM_ADDR;
-  sw_infos.addr_length = GOAL_PWM_LEN;
-  sw_infos.is_info_changed = true;
   if (dxl.syncWrite(&sw_infos))
   {
     DEBUG_PRINTLN("[SyncWrite] Success");
@@ -379,13 +434,13 @@ void DynamixelBus::tick()
       auto joint_name_it = joint_id_to_name.find(id);
       std::string joint_name = (joint_name_it != joint_id_to_name.end()) ? joint_name_it->second : "Unknown";
 
-      auto joint = joints_map[joint_name_it->second];
-      joint->update_present_position(sr_data[i].present_position);
+      auto joint = joint_name_to_joint[joint_name];
+      joint->update_present_position(sr_data[i].raw_data);
 
       DEBUG_PRINTF("\tID=%d, name=%s\r\n", id, joint_name.c_str());
       DEBUG_PRINTF("\t\tpresent_position_raw=%d, present_position_deg=%f\r\n",
-                   sr_data[i].present_position,
-                   rawToDeg(sr_data[i].present_position));
+                   sr_data[i].raw_data,
+                   rawToDeg(sr_data[i].raw_data));
     }
   }
   else
@@ -395,32 +450,36 @@ void DynamixelBus::tick()
   }
 
   // SyncRead Velocity
-  // sr_infos.addr = SR_START_ADDR_VELOCITY;
-  // sr_infos.is_info_changed = true;
-  // recv_cnt = dxl.syncRead(&sr_infos);
-  // if (recv_cnt > 0)
-  // {
-  //   DEBUG_PRINT("[SyncRead] Success, Received ID Count: ");
-  //   DEBUG_PRINTLN(recv_cnt);
-  //   for (size_t i = 0; i < recv_cnt; i++)
-  //   {
-  //     uint8_t id = info_xels_sr[i].id;
-  //     auto joint_name_it = joint_id_to_name.find(id);
-  //     std::string joint_name = (joint_name_it != joint_id_to_name.end()) ? joint_name_it->second : "Unknown";
+  sr_infos.addr = SR_START_ADDR_VELOCITY;
+  sr_infos.is_info_changed = true;
+  recv_cnt = dxl.syncRead(&sr_infos);
+  if (recv_cnt > 0)
+  {
+    DEBUG_PRINT("[SyncRead] Success, Received ID Count: ");
+    DEBUG_PRINTLN(recv_cnt);
+    for (size_t i = 0; i < recv_cnt; i++)
+    {
+      uint8_t id = info_xels_sr[i].id;
+      auto joint_name_it = joint_id_to_name.find(id);
+      std::string joint_name = (joint_name_it != joint_id_to_name.end()) ? joint_name_it->second : "Unknown";
 
-  //     auto joint = joints_map[joint_name_it->second];
-  //     joint->update_present_velocity(sr_data[i].present_position);
+      auto joint = joint_name_to_joint[joint_name_it->second];
+      joint->update_present_velocity(sr_data[i].raw_data);
 
-  //     DEBUG_PRINTF("\tID=%d, name=%s\r\n", id, joint_name.c_str());
-  //     DEBUG_PRINTF("\t\tpresent_velocity_raw=%d\r\n",
-  //                  sr_data[i].present_position);
-  //   }
-  // }
-  // else
-  // {
-  //   DEBUG_PRINT("[SyncRead] Fail, Lib error code: ");
-  //   DEBUG_PRINTLN(dxl.getLastLibErrCode());
-  // }
+      DEBUG_PRINTF("\tID=%d, name=%s\r\n", id, joint_name.c_str());
+      DEBUG_PRINTF("\t\tpresent_velocity_raw=%d\r\n",
+                   sr_data[i].raw_data);
+      for (int i = 0; i < 3; i++)
+      {
+        DEBUG_PRINTF("%s feedback[%d]: %f\r\n", joint_name.c_str(), i, joint->feedback[i]);
+      }
+    }
+  }
+  else
+  {
+    DEBUG_PRINT("[SyncRead] Fail, Lib error code: ");
+    DEBUG_PRINTLN(dxl.getLastLibErrCode());
+  }
 
   DEBUG_PRINTLN("=======================================================");
 
@@ -442,24 +501,6 @@ void DynamixelBus::updateGoalPosition(uint8_t id, int32_t position_raw)
   }
 }
 
-void DynamixelBus::processFeedback()
-{
-  for (size_t i = 0; i < id_count; ++i)
-  {
-    uint8_t id = info_xels_sr[i].id;
-    auto joint_name_it = joint_id_to_name.find(id);
-    if (joint_name_it != joint_id_to_name.end())
-    {
-      auto joint = joints_map[joint_name_it->second];
-      joint->update_present_position(sr_data[i].present_position);
-    }
-    else
-    {
-      DEBUG_PRINTF("Joint ID %d not found in joint_id_to_name map.\n", id);
-    }
-  }
-}
-
 // ------------------ ROS Callback ------------------
 
 void servo_cmd_cb(const humanoid_msgs::ServoCommand &input_msg)
@@ -467,7 +508,7 @@ void servo_cmd_cb(const humanoid_msgs::ServoCommand &input_msg)
   DEBUG_PRINTF("%s() start\r\n", __func__);
 
   // Map of joint names to their desired positions from the ROS message
-  std::unordered_map<std::string, float> joint_positions = {
+  std::unordered_map<std::string, float> joint_goals = {
       {"right_shoulder_pitch", input_msg.right_shoulder_pitch},
       {"right_shoulder_roll", input_msg.right_shoulder_roll},
       {"right_elbow", input_msg.right_elbow},
@@ -482,11 +523,11 @@ void servo_cmd_cb(const humanoid_msgs::ServoCommand &input_msg)
       {"right_knee", input_msg.right_knee}};
 
   // Update joint goal positions
-  for (const auto &[name, position] : joint_positions)
+  for (const auto &[name, goal] : joint_goals)
   {
-    if (auto it = joints_map.find(name); it != joints_map.end())
+    if (auto it = joint_name_to_joint.find(name); it != joint_name_to_joint.end())
     {
-      it->second->updateGoalPosition(position);
+      it->second->updateGoalPosition(goal);
     }
     else
     {
@@ -512,7 +553,7 @@ void servo_setup()
   for (const auto &joint_cfg : joint_configs)
   {
     auto joint = std::make_shared<Joint>(joint_cfg);
-    joints_map[joint->name] = joint;
+    joint_name_to_joint[joint->name] = joint;
     joint_id_to_name[joint->id] = joint->name;
 
     // Add joint to the appropriate bus
@@ -566,18 +607,18 @@ void ros_setup()
   servo_fb_msg.right_knee_length = 3;
 
   // Setup pointers to the feedback arrays
-  servo_fb_msg.right_shoulder_pitch = joints_map["right_shoulder_pitch"]->feedback.data();
-  servo_fb_msg.right_shoulder_roll = joints_map["right_shoulder_roll"]->feedback.data();
-  servo_fb_msg.right_elbow = joints_map["right_elbow"]->feedback.data();
-  servo_fb_msg.left_shoulder_pitch = joints_map["left_shoulder_pitch"]->feedback.data();
-  servo_fb_msg.left_shoulder_roll = joints_map["left_shoulder_roll"]->feedback.data();
-  servo_fb_msg.left_elbow = joints_map["left_elbow"]->feedback.data();
-  servo_fb_msg.left_hip_roll = joints_map["left_hip_roll"]->feedback.data();
-  servo_fb_msg.left_hip_pitch = joints_map["left_hip_pitch"]->feedback.data();
-  servo_fb_msg.left_knee = joints_map["left_knee"]->feedback.data();
-  servo_fb_msg.right_hip_roll = joints_map["right_hip_roll"]->feedback.data();
-  servo_fb_msg.right_hip_pitch = joints_map["right_hip_pitch"]->feedback.data();
-  servo_fb_msg.right_knee = joints_map["right_knee"]->feedback.data();
+  servo_fb_msg.right_shoulder_pitch = joint_name_to_joint["right_shoulder_pitch"]->feedback.data();
+  servo_fb_msg.right_shoulder_roll = joint_name_to_joint["right_shoulder_roll"]->feedback.data();
+  servo_fb_msg.right_elbow = joint_name_to_joint["right_elbow"]->feedback.data();
+  servo_fb_msg.left_shoulder_pitch = joint_name_to_joint["left_shoulder_pitch"]->feedback.data();
+  servo_fb_msg.left_shoulder_roll = joint_name_to_joint["left_shoulder_roll"]->feedback.data();
+  servo_fb_msg.left_elbow = joint_name_to_joint["left_elbow"]->feedback.data();
+  servo_fb_msg.left_hip_roll = joint_name_to_joint["left_hip_roll"]->feedback.data();
+  servo_fb_msg.left_hip_pitch = joint_name_to_joint["left_hip_pitch"]->feedback.data();
+  servo_fb_msg.left_knee = joint_name_to_joint["left_knee"]->feedback.data();
+  servo_fb_msg.right_hip_roll = joint_name_to_joint["right_hip_roll"]->feedback.data();
+  servo_fb_msg.right_hip_pitch = joint_name_to_joint["right_hip_pitch"]->feedback.data();
+  servo_fb_msg.right_knee = joint_name_to_joint["right_knee"]->feedback.data();
 
   DEBUG_PRINTF("%s() end\r\n", __func__);
 }
@@ -587,10 +628,6 @@ void servo_loop()
   for (auto &bus : buses)
   {
     bus->tick();
-  }
-  for (auto &bus : buses)
-  {
-    bus->processFeedback();
   }
 }
 
@@ -614,6 +651,7 @@ void setup()
 
 void loop()
 {
+  process_serial_cmd();
   servo_loop();
   ros_loop();
 }
