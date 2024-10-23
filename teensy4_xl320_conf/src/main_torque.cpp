@@ -48,6 +48,7 @@ const float DXL_PROTOCOL_VERSION = 2.0;
 
 const uint16_t SR_START_ADDR_POSITION = 132;
 const uint16_t SR_START_ADDR_VELOCITY = 128;
+const uint16_t SR_START_ADDR_LOAD = 126;
 const uint16_t SR_ADDR_LEN = 4;
 const uint16_t GOAL_POSITION_ADDR = 116;
 const uint16_t GOAL_PWM_ADDR = 100;
@@ -57,12 +58,12 @@ const uint16_t GOAL_PWM_LEN = 2;
 // Structures for SyncRead and SyncWrite data
 typedef struct sr_data
 {
-  int32_t raw_data;
+  int32_t data_raw;
 } __attribute__((packed)) sr_data_t;
 
 typedef struct sw_data
 {
-  int32_t goal_position;
+  int32_t data_raw;
 } __attribute__((packed)) sw_data_t;
 
 // Function to convert degrees to raw goal
@@ -144,7 +145,7 @@ public:
     feedback.resize(3, 0.0f);
   }
 
-  void updateGoalPosition(float raw_data);
+  void update_goal(float data_raw);
   void update_present_position(int32_t raw_position);
   void update_present_velocity(int32_t raw_velocity);
   void update_present_load(int32_t raw_load);
@@ -173,7 +174,7 @@ public:
 
   void setup();
   void tick();
-  void updateGoalPosition(uint8_t id, int32_t position_raw);
+  void update_goal(uint8_t id, int32_t position_raw);
   void processFeedback();
 
   void addJoint(std::shared_ptr<Joint> joint);
@@ -210,13 +211,16 @@ std::vector<std::shared_ptr<DynamixelBus>> buses;
 
 // ------------------ Function Implementations ------------------
 
-void Joint::updateGoalPosition(float raw_data)
+void Joint::update_goal(float data_raw)
 {
-  goal_raw = degToRaw(raw_data);
+  if (operating_mode == OP_POSITION)
+  {
+    goal_raw = degToRaw(data_raw);
+  }
   auto bus_it = bus_map.find(bus_number);
   if (bus_it != bus_map.end())
   {
-    bus_it->second->updateGoalPosition(id, goal_raw);
+    bus_it->second->update_goal(id, goal_raw);
   }
   else
   {
@@ -302,10 +306,10 @@ void DynamixelBus::setup()
     info_xels_sr[i].p_recv_buf = reinterpret_cast<uint8_t *>(&sr_data[i]);
 
     info_xels_sw[i].id = id_list[i];
-    info_xels_sw[i].p_data = reinterpret_cast<uint8_t *>(&sw_data[i].goal_position);
+    info_xels_sw[i].p_data = reinterpret_cast<uint8_t *>(&sw_data[i].data_raw);
 
     // Set initial goal positions from joints
-    sw_data[i].goal_position = joints[i]->goal_raw;
+    sw_data[i].data_raw = joints[i]->goal_raw;
   }
 
   // Go to initial positions
@@ -320,8 +324,8 @@ void DynamixelBus::setup()
 
       DEBUG_PRINTF("\tID=%d, name=%s\r\n", id, joint_name.c_str());
       DEBUG_PRINTF("\t\tgoal_position_raw=%d, goal_position_deg=%f\r\n",
-                   sw_data[i].goal_position,
-                   rawToDeg(sw_data[i].goal_position));
+                   sw_data[i].data_raw,
+                   rawToDeg(sw_data[i].data_raw));
     }
   }
   else
@@ -409,8 +413,8 @@ void DynamixelBus::tick()
 
       DEBUG_PRINTF("\tID=%d, name=%s\r\n", id, joint_name.c_str());
       DEBUG_PRINTF("\t\tgoal_position_raw=%d, goal_position_deg=%f\r\n",
-                   sw_data[i].goal_position,
-                   rawToDeg(sw_data[i].goal_position));
+                   sw_data[i].data_raw,
+                   rawToDeg(sw_data[i].data_raw));
     }
   }
   else
@@ -435,12 +439,12 @@ void DynamixelBus::tick()
       std::string joint_name = (joint_name_it != joint_id_to_name.end()) ? joint_name_it->second : "Unknown";
 
       auto joint = joint_name_to_joint[joint_name];
-      joint->update_present_position(sr_data[i].raw_data);
+      joint->update_present_position(sr_data[i].data_raw);
 
       DEBUG_PRINTF("\tID=%d, name=%s\r\n", id, joint_name.c_str());
       DEBUG_PRINTF("\t\tpresent_position_raw=%d, present_position_deg=%f\r\n",
-                   sr_data[i].raw_data,
-                   rawToDeg(sr_data[i].raw_data));
+                   sr_data[i].data_raw,
+                   rawToDeg(sr_data[i].data_raw));
     }
   }
   else
@@ -451,6 +455,7 @@ void DynamixelBus::tick()
 
   // SyncRead Velocity
   sr_infos.addr = SR_START_ADDR_VELOCITY;
+  sr_infos.addr_length = 2;
   sr_infos.is_info_changed = true;
   recv_cnt = dxl.syncRead(&sr_infos);
   if (recv_cnt > 0)
@@ -464,11 +469,40 @@ void DynamixelBus::tick()
       std::string joint_name = (joint_name_it != joint_id_to_name.end()) ? joint_name_it->second : "Unknown";
 
       auto joint = joint_name_to_joint[joint_name_it->second];
-      joint->update_present_velocity(sr_data[i].raw_data);
+      joint->update_present_velocity(sr_data[i].data_raw);
 
       DEBUG_PRINTF("\tID=%d, name=%s\r\n", id, joint_name.c_str());
       DEBUG_PRINTF("\t\tpresent_velocity_raw=%d\r\n",
-                   sr_data[i].raw_data);
+                   sr_data[i].data_raw);
+    }
+  }
+  else
+  {
+    DEBUG_PRINT("[SyncRead] Fail, Lib error code: ");
+    DEBUG_PRINTLN(dxl.getLastLibErrCode());
+  }
+
+  // SyncRead Load
+  sr_infos.addr = SR_START_ADDR_LOAD;
+  sr_infos.is_info_changed = true;
+  sr_infos.addr_length = 2;
+  recv_cnt = dxl.syncRead(&sr_infos);
+  if (recv_cnt > 0)
+  {
+    DEBUG_PRINT("[SyncRead] Success, Received ID Count: ");
+    DEBUG_PRINTLN(recv_cnt);
+    for (size_t i = 0; i < recv_cnt; i++)
+    {
+      uint8_t id = info_xels_sr[i].id;
+      auto joint_name_it = joint_id_to_name.find(id);
+      std::string joint_name = (joint_name_it != joint_id_to_name.end()) ? joint_name_it->second : "Unknown";
+
+      auto joint = joint_name_to_joint[joint_name_it->second];
+      joint->update_present_load(sr_data[i].data_raw);
+
+      DEBUG_PRINTF("\tID=%d, name=%s\r\n", id, joint_name.c_str());
+      DEBUG_PRINTF("\t\tpresent_load_raw=%d\r\n",
+                   sr_data[i].data_raw);
       for (int i = 0; i < 3; i++)
       {
         DEBUG_PRINTF("%s feedback[%d]: %f\r\n", joint_name.c_str(), i, joint->feedback[i]);
@@ -486,13 +520,13 @@ void DynamixelBus::tick()
   digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
 }
 
-void DynamixelBus::updateGoalPosition(uint8_t id, int32_t position_raw)
+void DynamixelBus::update_goal(uint8_t id, int32_t position_raw)
 {
   auto it = std::find(id_list.begin(), id_list.end(), id);
   if (it != id_list.end())
   {
     size_t index = std::distance(id_list.begin(), it);
-    sw_data[index].goal_position = position_raw;
+    sw_data[index].data_raw = position_raw;
     sw_infos.is_info_changed = true;
   }
   else
@@ -527,7 +561,7 @@ void servo_cmd_cb(const humanoid_msgs::ServoCommand &input_msg)
   {
     if (auto it = joint_name_to_joint.find(name); it != joint_name_to_joint.end())
     {
-      it->second->updateGoalPosition(goal);
+      it->second->update_goal(goal);
     }
     else
     {
