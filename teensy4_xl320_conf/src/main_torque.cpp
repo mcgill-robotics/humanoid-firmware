@@ -1,5 +1,5 @@
 #include "common.h"
-#if COMPILE_CFG == 1
+#if COMPILE_CFG == -1
 
 #include <Arduino.h>
 #include "cmd_utils.hpp"
@@ -460,43 +460,6 @@ void DynamixelBus::processFeedback()
   }
 }
 
-// ------------------ Servo Setup Function ------------------
-void servo_setup()
-{
-  // Create buses and add them to bus_map and buses vector
-  for (const auto &bus_cfg : bus_configs)
-  {
-    auto bus = std::make_shared<DynamixelBus>(bus_cfg);
-    bus_map[bus_cfg.bus_number] = bus;
-    buses.push_back(bus);
-  }
-
-  // Create joints and assign them to buses
-  for (const auto &joint_cfg : joint_configs)
-  {
-    auto joint = std::make_shared<Joint>(joint_cfg);
-    joints_map[joint->name] = joint;
-    joint_id_to_name[joint->id] = joint->name;
-
-    // Add joint to the appropriate bus
-    auto bus_it = bus_map.find(joint->bus_number);
-    if (bus_it != bus_map.end())
-    {
-      bus_it->second->addJoint(joint);
-    }
-    else
-    {
-      DEBUG_PRINTF("Bus number %d not found for joint %s\n", joint->bus_number, joint->name.c_str());
-    }
-  }
-
-  // Setup each bus
-  for (auto &bus : buses)
-  {
-    bus->setup();
-  }
-}
-
 // ------------------ ROS Callback ------------------
 
 void servo_cmd_cb(const humanoid_msgs::ServoCommand &input_msg)
@@ -532,6 +495,43 @@ void servo_cmd_cb(const humanoid_msgs::ServoCommand &input_msg)
   }
 
   DEBUG_PRINTF("%s() end\r\n", __func__);
+}
+
+// ------------------ Servo Setup Function ------------------
+void servo_setup()
+{
+  // Create buses and add them to bus_map and buses vector
+  for (const auto &bus_cfg : bus_configs)
+  {
+    auto bus = std::make_shared<DynamixelBus>(bus_cfg);
+    bus_map[bus_cfg.bus_number] = bus;
+    buses.push_back(bus);
+  }
+
+  // Create joints and assign them to buses
+  for (const auto &joint_cfg : joint_configs)
+  {
+    auto joint = std::make_shared<Joint>(joint_cfg);
+    joints_map[joint->name] = joint;
+    joint_id_to_name[joint->id] = joint->name;
+
+    // Add joint to the appropriate bus
+    auto bus_it = bus_map.find(joint->bus_number);
+    if (bus_it != bus_map.end())
+    {
+      bus_it->second->addJoint(joint);
+    }
+    else
+    {
+      DEBUG_PRINTF("Bus number %d not found for joint %s\n", joint->bus_number, joint->name.c_str());
+    }
+  }
+
+  // Setup each bus
+  for (auto &bus : buses)
+  {
+    bus->setup();
+  }
 }
 
 // ------------------ ROS Setup Function ------------------
