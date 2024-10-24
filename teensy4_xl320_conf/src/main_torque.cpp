@@ -78,6 +78,28 @@ static float rawToDeg(int32_t raw)
   return static_cast<float>(raw) * (360.0 / 4095.0);
 }
 
+// 1 unit is 0.229 rpm
+static float raw_velocity_to_ang_velocity(int32_t raw_velocity)
+{
+  return static_cast<float>(raw_velocity) * (0.229) * 2.0 * M_PI / 60.0;
+}
+
+static int32_t ang_velocity_to_raw_velocity(float ang_velocity)
+{
+  return static_cast<int16_t>(ang_velocity / (0.229 * 2.0 * M_PI) * 60.0);
+}
+
+// 1.4 Nm per 1000 units
+static float raw_load_to_torque(int16_t raw_load)
+{
+  return static_cast<float>(raw_load) / 1000.0 * 1.4;
+}
+
+static int16_t torque_to_raw_load(float torque)
+{
+  return static_cast<int16_t>(torque / 1.4 * 1000.0);
+}
+
 // Forward declaration of classes
 class Joint;
 class DynamixelBus;
@@ -217,6 +239,10 @@ void Joint::update_goal(float data_raw)
   {
     goal_raw = degToRaw(data_raw);
   }
+  else if (operating_mode == OP_PWM)
+  {
+    goal_raw = data_raw;
+  }
   auto bus_it = bus_map.find(bus_number);
   if (bus_it != bus_map.end())
   {
@@ -237,13 +263,13 @@ void Joint::update_present_position(int32_t raw_position)
 void Joint::update_present_velocity(int32_t raw_velocity)
 {
   present_velocity_raw = raw_velocity;
-  feedback[1] = raw_velocity;
+  feedback[1] = raw_velocity_to_ang_velocity((int32_t)raw_velocity);
 }
 
 void Joint::update_present_load(int32_t raw_load)
 {
   present_load_raw = raw_load;
-  feedback[2] = raw_load;
+  feedback[2] = raw_load_to_torque((int16_t)raw_load);
 }
 
 void DynamixelBus::addJoint(std::shared_ptr<Joint> joint)
@@ -343,6 +369,14 @@ void switch_mode(int operating_mode)
     for (auto &joint : bus->joints)
     {
       joint->operating_mode = operating_mode;
+      if (operating_mode == OP_POSITION)
+      {
+        joint->goal_raw = 2048;
+      }
+      else if (operating_mode == OP_PWM)
+      {
+        joint->goal_raw = 0;
+      }
       bus->dxl.torqueOff(joint->id);
       bus->dxl.setOperatingMode(joint->id, operating_mode);
       bus->dxl.torqueOn(joint->id);
@@ -385,6 +419,28 @@ void process_serial_cmd()
     {
       DEBUG_PRINTLN("Switching to PWM mode");
       switch_mode(OP_PWM);
+    }
+    else if (inChar == 'w')
+    {
+      DEBUG_PRINTLN("moving up");
+      for (auto &bus : buses)
+      {
+        for (auto &joint : bus->joints)
+        {
+          joint->update_goal((joint->goal_raw + 100) % 885);
+        }
+      }
+    }
+    else if (inChar == 's')
+    {
+      DEBUG_PRINTLN("Moving down");
+      for (auto &bus : buses)
+      {
+        for (auto &joint : bus->joints)
+        {
+          joint->update_goal((joint->goal_raw - 100) % 885);
+        }
+      }
     }
     else
     {
@@ -455,7 +511,7 @@ void DynamixelBus::tick()
 
   // SyncRead Velocity
   sr_infos.addr = SR_START_ADDR_VELOCITY;
-  sr_infos.addr_length = 2;
+  sr_infos.addr_length = 4;
   sr_infos.is_info_changed = true;
   recv_cnt = dxl.syncRead(&sr_infos);
   if (recv_cnt > 0)

@@ -1,5 +1,5 @@
 #include "common.h"
-#if COMPILE_CFG == -1
+#if COMPILE_CFG == 11
 
 #include <Arduino.h>
 #include <Dynamixel2Arduino.h>
@@ -7,7 +7,7 @@
 #include <cmath>
 
 // ------------------ Dynamixel ------------------
-#define DXL_SERIAL Serial4
+#define DXL_SERIAL Serial2
 #define DEBUG_SERIAL Serial5
 const int DXL_DIR_PIN = -1; // DYNAMIXEL Shield DIR PIN
 
@@ -24,7 +24,7 @@ const int DXL_DIR_PIN = -1; // DYNAMIXEL Shield DIR PIN
 #define DEBUG_PRINTF(...) // Empty definition
 #endif
 
-const uint8_t DXL_ID = 24;
+const uint8_t DXL_ID = 15;
 const float DXL_PROTOCOL_VERSION = 2.0;
 
 Dynamixel2Arduino dxl(DXL_SERIAL, DXL_DIR_PIN);
@@ -133,10 +133,10 @@ void setup()
   dxl.ping(DXL_ID);
 
   // Turn off torque when configuring items in EEPROM area
-  dxl.torqueOff(DXL_ID);
-  dxl.setOperatingMode(DXL_ID, OP_PWM);
-  op_mode = OP_PWM;
-  dxl.torqueOn(DXL_ID);
+  // dxl.torqueOff(DXL_ID);
+  // dxl.setOperatingMode(DXL_ID, OP_PWM);
+  // op_mode = OP_PWM;
+  // dxl.torqueOn(DXL_ID);
 
   last_time = millis();
 }
