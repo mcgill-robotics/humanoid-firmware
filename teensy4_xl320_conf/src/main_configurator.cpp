@@ -1,12 +1,12 @@
 #include "common.h"
-#if COMPILE_CFG == 2
+#if COMPILE_CFG == 11
 
 #include <Arduino.h>
 #include "cmd_utils.hpp"
 
 #include <Dynamixel2Arduino.h>
 
-#define DXL_SERIAL Serial1
+#define DXL_SERIAL Serial4
 #define DEBUG_SERIAL SerialUSB
 // const int DXL_DIR_PIN = 2; // DYNAMIXEL Shield DIR PIN
 const int DXL_DIR_PIN = -1; // DYNAMIXEL Shield DIR PIN
@@ -20,7 +20,7 @@ volatile int app_choice = 0;
 const uint8_t BROADCAST_ID = 0xFE;
 const float DXL_PROTOCOL_VERSION = 2.0;
 // uint32_t baud_rates[] = {9600, 57600, 115200, 1000000, 2000000, 3000000};
-uint32_t baud_rates[] = {57600};
+uint32_t baud_rates[] = {57600, 1000000};
 size_t num_baud_rates = sizeof(baud_rates) / sizeof(baud_rates[0]);
 // uint8_t target_id = BROADCAST_ID;
 Dynamixel2Arduino dxl(DXL_SERIAL, DXL_DIR_PIN);
@@ -160,6 +160,62 @@ void process_serial_cmd()
   }
 }
 
+void baudrate_app_setup()
+{
+  // // Prompt the user for the new ID
+  // DEBUG_SERIAL.println("Enter new ID for the DYNAMIXEL:");
+  // new_id = readSerialInput();
+  // DEBUG_SERIAL.printf("New ID entered: %d\n", new_id);
+
+  for (size_t i = 0; i < num_baud_rates; i++)
+  {
+    uint32_t baud_rate = baud_rates[i];
+    dxl.begin(baud_rate);
+    dxl.setPortProtocolVersion(DXL_PROTOCOL_VERSION);
+
+    DEBUG_SERIAL.print("Trying baud rate: ");
+    DEBUG_SERIAL.println(baud_rate);
+
+    for (int id = 0; id < DXL_BROADCAST_ID; id++)
+    {
+      dxl.begin(baud_rate);
+      DEBUG_SERIAL.printf("TRYING id=%d, baud_rate=%d\r\n",
+                          id, baud_rate);
+      if (dxl.ping(id))
+      {
+        int modelNumber = dxl.getModelNumber(id);
+        DEBUG_SERIAL.printf("FOUND ID : %d, Model Number: %d, Baud Rate: %d\r\n",
+                            id, modelNumber, baud_rate);
+        dxl.torqueOff(id);
+        dxl.setBaudrate(id, 1000000);
+        dxl.begin(1000000);
+      }
+      if (dxl.ping(id))
+      {
+        int modelNumber = dxl.getModelNumber(id);
+        DEBUG_SERIAL.printf("CHANGED ID : %d, Model Number: %d, Baud Rate: %d\r\n",
+                            id, modelNumber, 1000000);
+      }
+    }
+  }
+  DEBUG_SERIAL.printf("%s complete\r\n", __func__);
+}
+
+void baudrate_app_loop()
+{
+  dxl.begin(1000000);
+  dxl.setPortProtocolVersion(DXL_PROTOCOL_VERSION);
+  for (int id = 0; id < DXL_BROADCAST_ID; id++)
+  {
+    if (dxl.ping(id))
+    {
+      int modelNumber = dxl.getModelNumber(id);
+      DEBUG_SERIAL.printf("DETECTED ID : %d, Model Number: %d, Baud Rate: %d\r\n",
+                          1, modelNumber, 1000000);
+    }
+  }
+}
+
 void mass_scan_app_setup()
 {
   for (size_t i = 0; i < num_baud_rates; i++)
@@ -210,12 +266,8 @@ void mass_scan_app_loop()
   DEBUG_SERIAL.println("Found devices:");
   for (int i = 0; i < foundDeviceCount; i++)
   {
-    DEBUG_SERIAL.print("ID: ");
-    DEBUG_SERIAL.print(foundDevices[i].id);
-    DEBUG_SERIAL.print(", Model Number: ");
-    DEBUG_SERIAL.print(foundDevices[i].modelNumber);
-    DEBUG_SERIAL.print(", Baud Rate: ");
-    DEBUG_SERIAL.println(foundDevices[i].baudRate);
+    DEBUG_SERIAL.printf("\tID: %d, Model Number: %d, Baud Rate: %d\r\n",
+                        foundDevices[i].id, foundDevices[i].modelNumber, foundDevices[i].baudRate);
 
     dxl.torqueOn(foundDevices[i].id);
     dxl.setGoalPosition(foundDevices[i].id, 2048, UNIT_RAW);
@@ -534,6 +586,7 @@ void setup()
   DEBUG_SERIAL.printf("\t2: sync_read_app, test 2 servos sync read write\r\n");
   DEBUG_SERIAL.printf("\t3: factory_reset_app, factory reset config for the whole bus\r\n");
   DEBUG_SERIAL.printf("\t4: set_id_2x_app, for 2XL430\r\n");
+  DEBUG_SERIAL.printf("\t5: baudrate_app, for single ID\r\n");
 
   app_choice = readSerialInput();
   switch (app_choice)
@@ -551,6 +604,8 @@ void setup()
     factory_reset_app_setup();
   case 4:
     set_id_2x_app_setup();
+  case 5:
+    baudrate_app_setup();
   }
 }
 
@@ -573,6 +628,10 @@ void loop()
   case 4:
     delay(1000);
     DEBUG_SERIAL.println("set_id_2x_app");
+    break;
+  case 5:
+    delay(1000);
+    baudrate_app_loop();
     break;
   }
 }
