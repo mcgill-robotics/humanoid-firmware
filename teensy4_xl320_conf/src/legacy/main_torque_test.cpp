@@ -7,7 +7,7 @@
 #include <cmath>
 
 // ------------------ Dynamixel ------------------
-#define DXL_SERIAL Serial2
+#define DXL_SERIAL Serial4
 #define DEBUG_SERIAL Serial5
 const int DXL_DIR_PIN = -1; // DYNAMIXEL Shield DIR PIN
 
@@ -24,11 +24,13 @@ const int DXL_DIR_PIN = -1; // DYNAMIXEL Shield DIR PIN
 #define DEBUG_PRINTF(...) // Empty definition
 #endif
 
-const uint8_t DXL_ID = 15;
+const uint8_t DXL_ID = 24;
 const float DXL_PROTOCOL_VERSION = 2.0;
 
 Dynamixel2Arduino dxl(DXL_SERIAL, DXL_DIR_PIN);
 
+void switch_mode(uint8_t id);
+void switch_mode_batch();
 // This namespace is required to use Control table item names
 using namespace ControlTableItem;
 
@@ -41,6 +43,8 @@ float present_velocity = 0;
 float present_pwm = 0;
 float present_current = 0;
 float present_load = 0;
+float present_mode = 0;
+float present_error = 0;
 
 float desired_position = 0;
 float desired_pwm = 0;
@@ -85,21 +89,8 @@ void process_serial_cmd()
     else if (inChar == 'q')
     {
       DEBUG_SERIAL.println("switching mode");
-      // switch mode
-      if (op_mode == OP_PWM)
-      {
-        dxl.torqueOff(DXL_ID);
-        dxl.setOperatingMode(DXL_ID, OP_POSITION);
-        dxl.torqueOn(DXL_ID);
-        op_mode = OP_POSITION;
-      }
-      else if (op_mode == OP_POSITION)
-      {
-        dxl.torqueOff(DXL_ID);
-        dxl.setOperatingMode(DXL_ID, OP_PWM);
-        dxl.torqueOn(DXL_ID);
-        op_mode = OP_PWM;
-      }
+      // switch_mode(DXL_ID);
+      switch_mode_batch();
     }
     else if (inChar == 'r')
     {
@@ -118,6 +109,54 @@ void process_serial_cmd()
   }
 }
 
+void switch_mode(uint8_t id)
+{
+  if (op_mode == OP_PWM)
+  {
+    dxl.torqueOff(id);
+    dxl.setOperatingMode(id, OP_POSITION);
+    dxl.torqueOn(id);
+    op_mode = OP_POSITION;
+  }
+  else if (op_mode == OP_POSITION)
+  {
+    dxl.torqueOff(id);
+    dxl.setOperatingMode(id, OP_PWM);
+    dxl.torqueOn(id);
+    op_mode = OP_PWM;
+  }
+}
+
+void switch_mode_batch()
+{
+  if (op_mode == OP_PWM)
+  {
+    dxl.torqueOff(24);
+    dxl.torqueOff(25);
+    dxl.torqueOff(26);
+    dxl.setOperatingMode(24, OP_POSITION);
+    dxl.setOperatingMode(25, OP_POSITION);
+    dxl.setOperatingMode(26, OP_POSITION);
+    dxl.torqueOn(24);
+    dxl.torqueOn(25);
+    dxl.torqueOn(26);
+    op_mode = OP_POSITION;
+  }
+  else if (op_mode == OP_POSITION)
+  {
+    dxl.torqueOff(24);
+    dxl.torqueOff(25);
+    dxl.torqueOff(26);
+    dxl.setOperatingMode(24, OP_PWM);
+    dxl.setOperatingMode(25, OP_PWM);
+    dxl.setOperatingMode(26, OP_PWM);
+    dxl.torqueOn(24);
+    dxl.torqueOn(25);
+    dxl.torqueOn(26);
+    op_mode = OP_PWM;
+  }
+}
+
 void setup()
 {
   // put your setup code here, to run once:
@@ -126,17 +165,17 @@ void setup()
   DEBUG_SERIAL.begin(115200);
 
   // Set Port baudrate to 57600bps. This has to match with DYNAMIXEL baudrate.
-  dxl.begin(57600);
+  dxl.begin(1000000);
   // Set Port Protocol Version. This has to match with DYNAMIXEL protocol version.
   dxl.setPortProtocolVersion(DXL_PROTOCOL_VERSION);
   // Get DYNAMIXEL information, detects servo model number
   dxl.ping(DXL_ID);
 
   // Turn off torque when configuring items in EEPROM area
-  // dxl.torqueOff(DXL_ID);
-  // dxl.setOperatingMode(DXL_ID, OP_PWM);
-  // op_mode = OP_PWM;
-  // dxl.torqueOn(DXL_ID);
+  dxl.torqueOff(DXL_ID);
+  dxl.setOperatingMode(DXL_ID, OP_POSITION);
+  op_mode = OP_POSITION;
+  dxl.torqueOn(DXL_ID);
 
   last_time = millis();
 }
@@ -145,6 +184,28 @@ void servo_loop()
 {
 }
 
+void print_servo(uint8_t id)
+{
+  present_position = dxl.getPresentPosition(id, UNIT_RAW);
+  present_velocity = dxl.getPresentVelocity(id, UNIT_RAW);
+  present_current = dxl.getPresentCurrent(id, UNIT_RAW);
+  present_pwm = dxl.getPresentPWM(id, UNIT_RAW);
+  present_load = dxl.readControlTableItem(PRESENT_LOAD, id);
+  present_mode = dxl.readControlTableItem(OPERATING_MODE, id);
+  present_error = dxl.readControlTableItem(HARDWARE_ERROR_STATUS, id);
+
+  last_time = millis();
+  DEBUG_SERIAL.println("=======================================================");
+  DEBUG_SERIAL.printf("Dynamixel Status, id=%d\r\n", id);
+  DEBUG_SERIAL.println("=======================================================");
+  DEBUG_SERIAL.printf("\tdesired_position=%f, present_position=%f\r\n", desired_position, present_position);
+  DEBUG_SERIAL.printf("\tdesired_pwm=%f, present_pwm=%f\r\n", desired_pwm, present_pwm);
+  DEBUG_SERIAL.printf("\tpresent_velocity=%f\r\n", present_velocity);
+  DEBUG_SERIAL.printf("\tpresent_load=%f\r\n", present_load);
+  DEBUG_SERIAL.printf("\tpresent_mode=%f\r\n", present_mode);
+  DEBUG_SERIAL.printf("\tpresent_error=%f\r\n", present_error);
+  DEBUG_SERIAL.printf("\tpresent_current=%f\r\n", present_current);
+}
 void loop()
 {
   // dxl.setGoalPWM(DXL_ID, 300);
@@ -163,21 +224,10 @@ void loop()
 
   if (last_time + 200 < millis())
   {
-    present_position = dxl.getPresentPosition(DXL_ID, UNIT_RAW);
-    present_velocity = dxl.getPresentVelocity(DXL_ID, UNIT_RAW);
-    present_current = dxl.getPresentCurrent(DXL_ID, UNIT_RAW);
-    present_pwm = dxl.getPresentPWM(DXL_ID, UNIT_RAW);
-    present_load = dxl.readControlTableItem(PRESENT_LOAD, DXL_ID);
-
-    last_time = millis();
-    DEBUG_SERIAL.println("=======================================================");
-    DEBUG_SERIAL.println("Dynamixel Status");
-    DEBUG_SERIAL.println("=======================================================");
-    DEBUG_SERIAL.printf("desired_position=%f, present_position=%f\r\n", desired_position, present_position);
-    DEBUG_SERIAL.printf("desired_pwm=%f, present_pwm=%f\r\n", desired_pwm, present_pwm);
-    DEBUG_SERIAL.printf("present_velocity=%f\r\n", present_velocity);
-    DEBUG_SERIAL.printf("present_load=%f\r\n", present_load);
-    DEBUG_SERIAL.printf("present_current=%f\r\n", present_current);
+    // print_servo(DXL_ID);
+    print_servo(24);
+    print_servo(25);
+    print_servo(26);
   }
 }
 
