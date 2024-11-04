@@ -19,6 +19,8 @@
 #include "ros_helpers.h"
 #include "std_msgs/Float32.h"
 
+void switch_mode(int operating_mode);
+
 // ------------------ ROS ------------------
 ros::NodeHandle nh;
 void servo_cmd_cb(const humanoid_msgs::ServoCommand &input_msg);
@@ -202,6 +204,9 @@ public:
   void tick();
   void update_goal(uint8_t id, int32_t position_raw);
   void processFeedback();
+  void torqueOff();
+  void torqueOn();
+  void setOperatingMode(int operating_mode);
 
   void addJoint(std::shared_ptr<Joint> joint);
 
@@ -273,13 +278,40 @@ void Joint::update_present_velocity(int32_t raw_velocity)
 void Joint::update_present_load(int32_t raw_load)
 {
   present_load_raw = raw_load;
-  feedback[2] = raw_load_to_torque((int16_t)raw_load);
+  // feedback[2] = raw_load_to_torque((int16_t)raw_load);
+  feedback[2] = (float)raw_load;
 }
 
 void DynamixelBus::addJoint(std::shared_ptr<Joint> joint)
 {
   joints.push_back(joint);
   id_list.push_back(joint->id);
+}
+
+void DynamixelBus::torqueOff()
+{
+  for (auto id : id_list)
+  {
+    dxl.torqueOff(id);
+  }
+}
+
+void DynamixelBus::torqueOn()
+{
+  for (auto id : id_list)
+  {
+    dxl.torqueOn(id);
+  }
+}
+
+void DynamixelBus::setOperatingMode(int operating_mode)
+{
+  for (auto id : id_list)
+  {
+    dxl.setOperatingMode(id, operating_mode);
+    auto joint = joint_name_to_joint[joint_id_to_name[id]];
+    joint->operating_mode = operating_mode;
+  }
 }
 
 void DynamixelBus::setup()
@@ -293,15 +325,18 @@ void DynamixelBus::setup()
   dxl.begin(1000000);
   dxl.setPortProtocolVersion(DXL_PROTOCOL_VERSION);
 
-  // Initialize IDs
-  for (auto id : id_list)
-  {
-    dxl.torqueOff(id);
-    dxl.setOperatingMode(id, OP_POSITION);
-    dxl.torqueOn(id);
-    auto joint = joint_name_to_joint[joint_id_to_name[id]];
-    joint->operating_mode = OP_POSITION;
-  }
+  // Initialize Mode
+  // for (auto id : id_list)
+  // {
+  //   dxl.torqueOff(id);
+  //   dxl.setOperatingMode(id, OP_POSITION);
+  //   dxl.torqueOn(id);
+  //   auto joint = joint_name_to_joint[joint_id_to_name[id]];
+  //   joint->operating_mode = OP_POSITION;
+  // }
+  this->torqueOff();
+  this->setOperatingMode(OP_POSITION);
+  this->torqueOn();
 
   // Allocate the vectors
   sr_data.resize(id_count);
@@ -383,9 +418,16 @@ void switch_mode(int operating_mode)
         joint->goal_raw = 0;
       }
       bus->dxl.torqueOff(joint->id);
+    }
+    for (auto &joint : bus->joints)
+    {
       bus->dxl.setOperatingMode(joint->id, operating_mode);
+    }
+    for (auto &joint : bus->joints)
+    {
       bus->dxl.torqueOn(joint->id);
     }
+
     if (operating_mode == OP_POSITION)
     {
       bus->sw_infos.addr = GOAL_POSITION_ADDR;
@@ -402,30 +444,6 @@ void switch_mode(int operating_mode)
     {
       DEBUG_PRINTLN("Invalid operating mode");
       return;
-    }
-  }
-}
-
-void print_mode()
-{
-  for (auto &bus : buses)
-  {
-    for (auto &joint : bus->joints)
-    {
-      DEBUG_PRINTF("name=%s, current_mode=%d\r\n",
-                   joint->name.c_str(),
-                   joint->operating_mode);
-    }
-  }
-}
-
-void torque_on()
-{
-  for (auto &bus : buses)
-  {
-    for (auto &joint : bus->joints)
-    {
-      bus->dxl.torqueOn(joint->id);
     }
   }
 }
@@ -569,9 +587,11 @@ void DynamixelBus::tick()
   }
 
   // SyncRead Load
-  sr_infos.addr = SR_START_ADDR_LOAD;
+  // sr_infos.addr = SR_START_ADDR_LOAD;
+  // sr_infos.addr_length = 2;
+  sr_infos.addr = 11;
+  sr_infos.addr_length = 1;
   sr_infos.is_info_changed = true;
-  sr_infos.addr_length = 2;
   recv_cnt = dxl.syncRead(&sr_infos);
   if (recv_cnt > 0)
   {
@@ -584,11 +604,13 @@ void DynamixelBus::tick()
       std::string joint_name = (joint_name_it != joint_id_to_name.end()) ? joint_name_it->second : "Unknown";
 
       auto joint = joint_name_to_joint[joint_name_it->second];
-      joint->update_present_load(sr_data[i].data_raw);
+      // joint->update_present_load(sr_data[i].data_raw);
+      joint->update_present_load(sr_data[i].data_raw & 0xFF);
 
       DEBUG_PRINTF("\tID=%d, name=%s\r\n", id, joint_name.c_str());
       DEBUG_PRINTF("\t\tpresent_load_raw=%d\r\n",
-                   sr_data[i].data_raw);
+                   //  sr_data[i].data_raw);
+                   sr_data[i].data_raw & 0xFF);
       // for (int i = 0; i < 3; i++)
       // {
       //   DEBUG_PRINTF("%s feedback[%d]: %f\r\n", joint_name.c_str(), i, joint->feedback[i]);
@@ -695,12 +717,8 @@ void servo_mode_cb(const std_msgs::Float32 &input_msg)
   {
   case 0:
     switch_mode(OP_POSITION);
-    delay(100);
-    switch_mode(OP_POSITION);
     break;
   case 1:
-    switch_mode(OP_PWM);
-    delay(100);
     switch_mode(OP_PWM);
     break;
   default:
@@ -802,8 +820,8 @@ void servo_loop()
   for (auto &bus : buses)
   {
     bus->tick();
+    bus->torqueOn();
   }
-  torque_on();
 }
 
 void ros_loop()
@@ -829,7 +847,6 @@ void loop()
   process_serial_cmd();
   servo_loop();
   ros_loop();
-  print_mode();
 }
 
 #endif // COMPILE_CFG
