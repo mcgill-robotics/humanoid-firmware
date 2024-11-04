@@ -17,19 +17,22 @@
 #include "ServoCommand.h"
 #include "ServoFeedback.h"
 #include "ros_helpers.h"
+#include "std_msgs/Float32.h"
 
 // ------------------ ROS ------------------
 ros::NodeHandle nh;
 void servo_cmd_cb(const humanoid_msgs::ServoCommand &input_msg);
+void servo_mode_cb(const std_msgs::Float32 &input_msg);
 
 humanoid_msgs::ServoFeedback servo_fb_msg;
 ros::Publisher servo_fb_pub("servosFeedback", &servo_fb_msg);
 ros::Subscriber<humanoid_msgs::ServoCommand> servo_cmd_sub("servosCommand", servo_cmd_cb);
+ros::Subscriber<std_msgs::Float32> servo_mode_sub("/servosMode", servo_mode_cb);
 
 // ------------------ Dynamixel ------------------
 #define DEBUG_SERIAL Serial5
 // Uncomment the next line to enable debug printing
-#define ENABLE_DEBUG_PRINT // Comment this line to disable debug prints
+// #define ENABLE_DEBUG_PRINT // Comment this line to disable debug prints
 
 #ifdef ENABLE_DEBUG_PRINT
 #define DEBUG_PRINT(x) DEBUG_SERIAL.print(x)
@@ -49,6 +52,7 @@ const float DXL_PROTOCOL_VERSION = 2.0;
 const uint16_t SR_START_ADDR_POSITION = 132;
 const uint16_t SR_START_ADDR_VELOCITY = 128;
 const uint16_t SR_START_ADDR_LOAD = 126;
+const uint16_t SR_START_ADDR_ERROR_STATUS = 70;
 const uint16_t SR_ADDR_LEN = 4;
 const uint16_t GOAL_POSITION_ADDR = 116;
 const uint16_t GOAL_PWM_ADDR = 100;
@@ -285,7 +289,8 @@ void DynamixelBus::setup()
   id_count = id_list.size();
 
   // Initialize the Dynamixel bus
-  dxl.begin(57600);
+  // dxl.begin(57600);
+  dxl.begin(1000000);
   dxl.setPortProtocolVersion(DXL_PROTOCOL_VERSION);
 
   // Initialize IDs
@@ -401,6 +406,30 @@ void switch_mode(int operating_mode)
   }
 }
 
+void print_mode()
+{
+  for (auto &bus : buses)
+  {
+    for (auto &joint : bus->joints)
+    {
+      DEBUG_PRINTF("name=%s, current_mode=%d\r\n",
+                   joint->name.c_str(),
+                   joint->operating_mode);
+    }
+  }
+}
+
+void torque_on()
+{
+  for (auto &bus : buses)
+  {
+    for (auto &joint : bus->joints)
+    {
+      bus->dxl.torqueOn(joint->id);
+    }
+  }
+}
+
 void process_serial_cmd()
 {
   static String inputString = "";
@@ -482,6 +511,7 @@ void DynamixelBus::tick()
 
   // SyncRead Position
   sr_infos.addr = SR_START_ADDR_POSITION;
+  sr_infos.addr_length = 4;
   sr_infos.is_info_changed = true;
   recv_cnt = dxl.syncRead(&sr_infos);
   if (recv_cnt > 0)
@@ -559,10 +589,10 @@ void DynamixelBus::tick()
       DEBUG_PRINTF("\tID=%d, name=%s\r\n", id, joint_name.c_str());
       DEBUG_PRINTF("\t\tpresent_load_raw=%d\r\n",
                    sr_data[i].data_raw);
-      for (int i = 0; i < 3; i++)
-      {
-        DEBUG_PRINTF("%s feedback[%d]: %f\r\n", joint_name.c_str(), i, joint->feedback[i]);
-      }
+      // for (int i = 0; i < 3; i++)
+      // {
+      //   DEBUG_PRINTF("%s feedback[%d]: %f\r\n", joint_name.c_str(), i, joint->feedback[i]);
+      // }
     }
   }
   else
@@ -570,6 +600,34 @@ void DynamixelBus::tick()
     DEBUG_PRINT("[SyncRead] Fail, Lib error code: ");
     DEBUG_PRINTLN(dxl.getLastLibErrCode());
   }
+
+  // SyncRead Error Status
+  // sr_infos.addr = SR_START_ADDR_ERROR_STATUS;
+  // sr_infos.is_info_changed = true;
+  // sr_infos.addr_length = 1;
+  // recv_cnt = dxl.syncRead(&sr_infos);
+  // if (recv_cnt > 0)
+  // {
+  //   DEBUG_PRINT("[SyncRead] Success, Received ID Count: ");
+  //   DEBUG_PRINTLN(recv_cnt);
+  //   for (size_t i = 0; i < recv_cnt; i++)
+  //   {
+  //     uint8_t id = info_xels_sr[i].id;
+  //     auto joint_name_it = joint_id_to_name.find(id);
+  //     std::string joint_name = (joint_name_it != joint_id_to_name.end()) ? joint_name_it->second : "Unknown";
+
+  //     auto joint = joint_name_to_joint[joint_name_it->second];
+
+  //     DEBUG_PRINTF("\tID=%d, name=%s\r\n", id, joint_name.c_str());
+  //     uint8_t error = sr_data[i].data_raw & 0xFF; // Mask to get the first byte
+  //     DEBUG_PRINTF("\t\tcurrent_error=0x%02X\r\n", error);
+  //   }
+  // }
+  // else
+  // {
+  //   DEBUG_PRINT("[SyncRead] Fail, Lib error code: ");
+  //   DEBUG_PRINTLN(dxl.getLastLibErrCode());
+  // }
 
   DEBUG_PRINTLN("=======================================================");
 
@@ -628,6 +686,31 @@ void servo_cmd_cb(const humanoid_msgs::ServoCommand &input_msg)
   DEBUG_PRINTF("%s() end\r\n", __func__);
 }
 
+void servo_mode_cb(const std_msgs::Float32 &input_msg)
+{
+  DEBUG_PRINTF("%s() start\r\n", __func__);
+
+  int mode = (int)input_msg.data;
+  switch (mode)
+  {
+  case 0:
+    switch_mode(OP_POSITION);
+    delay(100);
+    switch_mode(OP_POSITION);
+    break;
+  case 1:
+    switch_mode(OP_PWM);
+    delay(100);
+    switch_mode(OP_PWM);
+    break;
+  default:
+    DEBUG_PRINTF("Invalid mode: %d\r\n", mode);
+    break;
+  }
+
+  DEBUG_PRINTF("%s() end\r\n", __func__);
+}
+
 // ------------------ Servo Setup Function ------------------
 void servo_setup()
 {
@@ -674,6 +757,7 @@ void ros_setup()
 
   nh.advertise(servo_fb_pub);
   nh.subscribe(servo_cmd_sub);
+  nh.subscribe(servo_mode_sub);
 
   nh.negotiateTopics();
   while (!nh.connected())
@@ -719,6 +803,7 @@ void servo_loop()
   {
     bus->tick();
   }
+  torque_on();
 }
 
 void ros_loop()
@@ -744,6 +829,7 @@ void loop()
   process_serial_cmd();
   servo_loop();
   ros_loop();
+  print_mode();
 }
 
 #endif // COMPILE_CFG
